@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import router from './routes/index.js';
 
-// 載入環境變數
+// 載入環境變數（必須在導入配置檔案之前）
 dotenv.config();
+
+import router from './routes/index.js';
+import { connectMongoDB, closeMongoDB } from './config/mongodb.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,9 +52,14 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: '伺服器內部錯誤' });
 });
 
-// 啟動伺服器
-app.listen(PORT, () => {
-  console.log(`
+// 啟動伺服器並初始化資料庫連線
+async function startServer() {
+  try {
+    // 初始化 MongoDB 連線
+    await connectMongoDB();
+
+    app.listen(PORT, () => {
+      console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
 ║   🎫 Encore API Server                                   ║
@@ -62,8 +69,28 @@ app.listen(PORT, () => {
 ║   API 文件: http://localhost:${PORT}/api                   ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
-  `);
+      `);
+    });
+  } catch (error) {
+    console.error('❌ 伺服器啟動失敗:', error);
+    process.exit(1);
+  }
+}
+
+// 優雅關閉
+process.on('SIGINT', async () => {
+  console.log('\n正在關閉伺服器...');
+  await closeMongoDB();
+  process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('\n正在關閉伺服器...');
+  await closeMongoDB();
+  process.exit(0);
+});
+
+startServer();
 
 export default app;
 
