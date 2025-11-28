@@ -9,7 +9,8 @@ import {
   X, 
   ShoppingBag, 
   Tag,
-  Home
+  Home,
+  Building2
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -30,11 +31,18 @@ export default function Layout() {
     { to: '/tickets', label: '瀏覽票券', icon: Ticket },
   ];
 
-  const userLinks = user ? [
-    { to: '/my-tickets', label: '我的票券', icon: Ticket },
-    { to: '/my-listings', label: '我的上架', icon: Tag },
-    { to: '/my-orders', label: '我的訂單', icon: ShoppingBag },
-  ] : [];
+  const isBusinessOperator = user?.roles?.includes('BusinessOperator');
+  const isRegularUser = user?.roles?.includes('User') && !isBusinessOperator;
+
+  const userLinks = user ? (
+    isBusinessOperator
+      ? [{ to: '/business/dashboard', label: '業務儀表板', icon: Building2 }]
+      : [
+          { to: '/my-tickets', label: '我的票券', icon: Ticket },
+          { to: '/my-listings', label: '我的上架', icon: Tag },
+          { to: '/my-orders', label: '我的訂單', icon: ShoppingBag },
+        ]
+  ) : [];
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -95,6 +103,11 @@ export default function Layout() {
                     <div className="flex items-center space-x-2 text-gray-300">
                       <User size={18} />
                       <span className="text-sm">{user.name}</span>
+                      {isBusinessOperator && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-primary-500/20 text-primary-400">
+                          業務經營者
+                        </span>
+                      )}
                     </div>
                     <button
                       onClick={handleLogout}

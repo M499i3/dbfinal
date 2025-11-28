@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Building2, Users } from 'lucide-react';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, registerBusinessOperator } = useAuth();
   const navigate = useNavigate();
+  const [userType, setUserType] = useState<'user' | 'business'>('user');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -38,7 +39,16 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await register(formData.name, formData.email, formData.phone, formData.password);
+      if (userType === 'business') {
+        await registerBusinessOperator(
+          formData.name,
+          formData.email,
+          formData.phone,
+          formData.password
+        );
+      } else {
+        await register(formData.name, formData.email, formData.phone, formData.password);
+      }
       navigate('/');
     } catch (err: any) {
       setError(err.message || '註冊失敗');
@@ -82,6 +92,39 @@ export default function RegisterPage() {
             <p className="text-gray-400">註冊成為 Encore 會員</p>
           </div>
 
+          {/* User Type Selection */}
+          <div className="mb-6">
+            <label className="block text-gray-400 text-sm mb-3">選擇帳戶類型</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setUserType('user')}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  userType === 'user'
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-gray-700 bg-[#12121a] hover:border-gray-600'
+                }`}
+              >
+                <Users className="mx-auto mb-2 text-primary-400" size={24} />
+                <div className="text-white font-medium">一般使用者</div>
+                <div className="text-gray-500 text-xs mt-1">查詢、購買、管理票券</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserType('business')}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  userType === 'business'
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-gray-700 bg-[#12121a] hover:border-gray-600'
+                }`}
+              >
+                <Building2 className="mx-auto mb-2 text-primary-400" size={24} />
+                <div className="text-white font-medium">業務經營者</div>
+                <div className="text-gray-500 text-xs mt-1">管理活動、場館、票券</div>
+              </button>
+            </div>
+          </div>
+
           {error && (
             <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
               {error}
@@ -92,7 +135,7 @@ export default function RegisterPage() {
             <div>
               <label className="block text-gray-400 text-sm mb-2">姓名</label>
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
                 <input
                   type="text"
                   name="name"
@@ -100,7 +143,7 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="您的姓名"
                   required
-                  className="input-field pl-12"
+                  className="input-field pr-12"
                 />
               </div>
             </div>
@@ -108,7 +151,7 @@ export default function RegisterPage() {
             <div>
               <label className="block text-gray-400 text-sm mb-2">電子郵件</label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
                 <input
                   type="email"
                   name="email"
@@ -116,7 +159,7 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="your@email.com"
                   required
-                  className="input-field pl-12"
+                  className="input-field pr-12"
                 />
               </div>
             </div>
@@ -124,7 +167,7 @@ export default function RegisterPage() {
             <div>
               <label className="block text-gray-400 text-sm mb-2">電話號碼</label>
               <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                <Phone className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
                 <input
                   type="tel"
                   name="phone"
@@ -132,7 +175,7 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="0912345678"
                   required
-                  className="input-field pl-12"
+                  className="input-field pr-12"
                 />
               </div>
             </div>
@@ -140,7 +183,6 @@ export default function RegisterPage() {
             <div>
               <label className="block text-gray-400 text-sm mb-2">密碼</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
@@ -148,12 +190,12 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="至少 6 個字元"
                   required
-                  className="input-field pl-12 pr-12"
+                  className="input-field pr-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 z-10"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -163,7 +205,6 @@ export default function RegisterPage() {
             <div>
               <label className="block text-gray-400 text-sm mb-2">確認密碼</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="confirmPassword"
@@ -171,7 +212,7 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="再次輸入密碼"
                   required
-                  className="input-field pl-12"
+                  className="input-field"
                 />
               </div>
             </div>

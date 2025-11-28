@@ -10,7 +10,7 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
       SELECT t.ticket_id, t.seat_label, t.face_value, t.original_vendor, t.serial_no,
              e.event_id, e.artist, e.title, e.event_date, e.start_time,
              sz.zone_id, sz.name as zone_name,
-             li.listing_id, li.price, l.seller_id,
+             li.listing_id, li.price, l.seller_id, l.created_at as listing_created_at,
              u.name as seller_name,
              COALESCE(AVG(r.score), 0) as seller_rating,
              COUNT(DISTINCT r.review_id) as review_count
@@ -29,7 +29,7 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
 
     if (eventId) {
       query += ` AND e.event_id = $${paramIndex}`;
-      params.push(eventId);
+      params.push(parseInt(eventId as string));
       paramIndex++;
     }
 
@@ -51,9 +51,21 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
       paramIndex++;
     }
 
+    const sortBy = req.query.sortBy as string || 'newest';
+    
+    let orderBy = '';
+    if (sortBy === 'price-asc') {
+      orderBy = 'ORDER BY li.price ASC';
+    } else if (sortBy === 'price-desc') {
+      orderBy = 'ORDER BY li.price DESC';
+    } else {
+      // 預設：按新發布排序
+      orderBy = 'ORDER BY l.created_at DESC';
+    }
+    
     query += `
-      GROUP BY t.ticket_id, e.event_id, sz.zone_id, li.listing_id, li.price, l.seller_id, u.name
-      ORDER BY li.price ASC
+      GROUP BY t.ticket_id, e.event_id, sz.zone_id, li.listing_id, li.price, l.seller_id, u.name, l.created_at
+      ${orderBy}
     `;
 
     const result = await pool.query(query, params);
@@ -79,6 +91,7 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
         listing: {
           listingId: ticket.listing_id,
           price: parseFloat(ticket.price),
+          createdAt: ticket.listing_created_at,
           seller: {
             sellerId: ticket.seller_id,
             name: ticket.seller_name,

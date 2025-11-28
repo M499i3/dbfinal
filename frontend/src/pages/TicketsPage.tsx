@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { getAvailableTickets, createOrder, Ticket } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, Filter, Ticket as TicketIcon, Star, Calendar, MapPin, ShoppingCart, X } from 'lucide-react';
@@ -11,13 +11,14 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [cart, setCart] = useState<Ticket[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
 
   useEffect(() => {
     fetchTickets();
-  }, [searchParams]);
+  }, [searchParams, sortBy]);
 
   const fetchTickets = async () => {
     try {
@@ -25,6 +26,7 @@ export default function TicketsPage() {
       const params: Record<string, string> = {};
       const eventId = searchParams.get('eventId');
       if (eventId) params.eventId = eventId;
+      if (sortBy) params.sortBy = sortBy;
       const data = await getAvailableTickets(params);
       setTickets(data.tickets);
     } catch (error) {
@@ -101,29 +103,43 @@ export default function TicketsPage() {
         </div>
 
         {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
-            <input
-              type="text"
-              placeholder="搜尋活動、藝人或座位區..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-12"
-            />
+        <div className="flex flex-col gap-4 mb-8">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
+              <input
+                type="text"
+                placeholder="搜尋活動、藝人或座位區..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input-field pr-12"
+              />
+            </div>
+            <div className="relative flex items-center gap-2">
+              <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-10" size={20} />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="input-field pr-12 pl-4 appearance-none cursor-pointer"
+              >
+                <option value="newest">最新發布</option>
+                <option value="price-asc">價格：低到高</option>
+                <option value="price-desc">價格：高到低</option>
+              </select>
+            </div>
+            <button
+              onClick={() => setShowCart(true)}
+              className="relative btn-secondary flex items-center justify-center space-x-2"
+            >
+              <ShoppingCart size={20} />
+              <span>購物車</span>
+              {cart.length > 0 && (
+                <span className="absolute -top-2 -right-2 w-6 h-6 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center">
+                  {cart.length}
+                </span>
+              )}
+            </button>
           </div>
-          <button
-            onClick={() => setShowCart(true)}
-            className="relative btn-secondary flex items-center justify-center space-x-2"
-          >
-            <ShoppingCart size={20} />
-            <span>購物車</span>
-            {cart.length > 0 && (
-              <span className="absolute -top-2 -right-2 w-6 h-6 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center">
-                {cart.length}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* Tickets Grid */}
@@ -194,7 +210,10 @@ export default function TicketsPage() {
 
                   {/* Seller Info */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-                    <div className="flex items-center space-x-2">
+                    <Link
+                      to={`/sellers/${ticket.listing.seller.sellerId}`}
+                      className="flex items-center space-x-2 hover:opacity-80 transition-opacity cursor-pointer"
+                    >
                       <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-medium text-white">
                         {ticket.listing.seller.name.charAt(0)}
                       </div>
@@ -207,7 +226,7 @@ export default function TicketsPage() {
                           <span>{ticket.listing.seller.reviewCount} 評價</span>
                         </div>
                       </div>
-                    </div>
+                    </Link>
                     {inCart ? (
                       <button
                         onClick={() => removeFromCart(ticket.ticketId)}

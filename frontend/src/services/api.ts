@@ -99,6 +99,7 @@ export interface Event {
   startTime: string;
   endTime: string;
   status: string;
+  imageUrl?: string;
   venue: {
     venueId: number;
     name: string;
@@ -149,6 +150,7 @@ export interface Ticket {
   listing: {
     listingId: number;
     price: number;
+    createdAt?: string;
     seller: {
       sellerId: number;
       name: string;

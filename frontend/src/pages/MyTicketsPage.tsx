@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getMyTickets, createListing, MyTicket } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Ticket, Calendar, MapPin, Tag, X, Plus } from 'lucide-react';
@@ -7,6 +7,7 @@ import { Ticket, Calendar, MapPin, Tag, X, Plus } from 'lucide-react';
 export default function MyTicketsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<MyTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showListingModal, setShowListingModal] = useState(false);
@@ -21,6 +22,15 @@ export default function MyTicketsPage() {
     }
     fetchTickets();
   }, [user, navigate]);
+
+  // Check if URL has action=create-listing parameter
+  useEffect(() => {
+    if (searchParams.get('action') === 'create-listing') {
+      setShowListingModal(true);
+      // Remove the parameter from URL
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchTickets = async () => {
     try {
@@ -218,7 +228,10 @@ export default function MyTicketsPage() {
             <div className="p-6 border-b border-gray-800 flex justify-between items-center">
               <h2 className="text-xl font-bold text-white">上架票券</h2>
               <button
-                onClick={() => setShowListingModal(false)}
+                onClick={() => {
+                  setShowListingModal(false);
+                  navigate('/my-tickets');
+                }}
                 className="text-gray-400 hover:text-white"
               >
                 <X size={24} />
@@ -310,7 +323,10 @@ export default function MyTicketsPage() {
 
               <div className="flex space-x-4">
                 <button
-                  onClick={() => setShowListingModal(false)}
+                  onClick={() => {
+                    setShowListingModal(false);
+                    navigate('/my-tickets');
+                  }}
                   className="flex-1 btn-secondary"
                 >
                   取消

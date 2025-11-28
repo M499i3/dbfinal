@@ -1,14 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMyListings, cancelListing, Listing } from '../services/api';
+import { getMyListings, cancelListing, createTicket, createListing, getEvents, getEventById, Listing, Event, EventDetail } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Tag, Calendar, X, AlertCircle } from 'lucide-react';
+import { Tag, Calendar, X, AlertCircle, Plus, Search } from 'lucide-react';
 
 export default function MyListingsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null);
+  const [loadingEvent, setLoadingEvent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Form data
+  const [formData, setFormData] = useState({
+    eventId: '',
+    zoneId: '',
+    seatLabel: '',
+    faceValue: '',
+    originalVendor: '',
+    serialNo: '',
+    price: '',
+    expiresAt: '',
+  });
 
   useEffect(() => {
     if (!user) {
@@ -17,6 +34,20 @@ export default function MyListingsPage() {
     }
     fetchListings();
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (showUploadModal) {
+      fetchEvents();
+    }
+  }, [showUploadModal]);
+
+  useEffect(() => {
+    if (formData.eventId) {
+      fetchEventDetails(parseInt(formData.eventId));
+    } else {
+      setSelectedEvent(null);
+    }
+  }, [formData.eventId]);
 
   const fetchListings = async () => {
     try {
@@ -27,6 +58,27 @@ export default function MyListingsPage() {
       console.error('Error fetching listings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const data = await getEvents({ status: 'Scheduled' });
+      setEvents(data.events);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  };
+
+  const fetchEventDetails = async (eventId: number) => {
+    try {
+      setLoadingEvent(true);
+      const event = await getEventById(eventId);
+      setSelectedEvent(event);
+    } catch (error) {
+      console.error('Error fetching event details:', error);
+    } finally {
+      setLoadingEvent(false);
     }
   };
 
@@ -73,6 +125,53 @@ export default function MyListingsPage() {
     }
   };
 
+  const handleUploadTicket = async () => {
+    if (!formData.eventId || !formData.zoneId || !formData.seatLabel || !formData.faceValue || !formData.price || !formData.expiresAt) {
+      alert('請填寫所有必填欄位');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      
+      // 先創建票券
+      const ticketResult = await createTicket({
+        eventId: parseInt(formData.eventId),
+        zoneId: parseInt(formData.zoneId),
+        seatLabel: formData.seatLabel,
+        faceValue: parseFloat(formData.faceValue),
+        originalVendor: formData.originalVendor || '其他',
+        serialNo: formData.serialNo || undefined,
+      });
+
+      // 然後創建上架
+      await createListing({
+        ticketIds: [ticketResult.ticket.ticket_id],
+        prices: [parseFloat(formData.price)],
+        expiresAt: formData.expiresAt,
+      });
+
+      alert('上架成功！');
+      setShowUploadModal(false);
+      setFormData({
+        eventId: '',
+        zoneId: '',
+        seatLabel: '',
+        faceValue: '',
+        originalVendor: '',
+        serialNo: '',
+        price: '',
+        expiresAt: '',
+      });
+      setSelectedEvent(null);
+      fetchListings();
+    } catch (error: any) {
+      alert(error.message || '上架失敗');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (!user) {
     return null;
   }
@@ -88,10 +187,13 @@ export default function MyListingsPage() {
             </h1>
             <p className="text-gray-400">管理您上架的票券</p>
           </div>
-          <Link to="/my-tickets" className="btn-primary flex items-center space-x-2">
-            <Tag size={20} />
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <Plus size={20} />
             <span>上架新票券</span>
-          </Link>
+          </button>
         </div>
 
         {/* Listings */}
@@ -112,9 +214,12 @@ export default function MyListingsPage() {
             <Tag className="mx-auto h-16 w-16 text-gray-600 mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">還沒有上架</h3>
             <p className="text-gray-400 mb-6">您目前還沒有上架任何票券</p>
-            <Link to="/my-tickets" className="btn-primary">
-              前往上架
-            </Link>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="btn-primary"
+            >
+              上架新票券
+            </button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -192,7 +297,182 @@ export default function MyListingsPage() {
           </div>
         )}
       </div>
+
+      {/* Upload Ticket Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => setShowUploadModal(false)}
+          ></div>
+          <div className="relative w-full max-w-2xl bg-[#12121a] border border-gray-800 rounded-2xl max-h-[90vh] overflow-auto">
+            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">上架新票券</h2>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <p className="text-gray-400">填寫票券資訊並設定售價</p>
+
+              {/* Event Selection */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">活動 *</label>
+                <select
+                  value={formData.eventId}
+                  onChange={(e) => setFormData({ ...formData, eventId: e.target.value, zoneId: '' })}
+                  className="input-field"
+                  required
+                >
+                  <option value="">選擇活動</option>
+                  {events.map((event) => (
+                    <option key={event.eventId} value={event.eventId}>
+                      {event.title} - {event.artist} ({new Date(event.eventDate).toLocaleDateString('zh-TW')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Zone Selection */}
+              {selectedEvent && (
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">座位區域 *</label>
+                  {loadingEvent ? (
+                    <div className="text-gray-500">載入中...</div>
+                  ) : (
+                    <select
+                      value={formData.zoneId}
+                      onChange={(e) => setFormData({ ...formData, zoneId: e.target.value })}
+                      className="input-field"
+                      required
+                    >
+                      <option value="">選擇座位區域</option>
+                      {selectedEvent.seatZones.map((zone) => (
+                        <option key={zone.zoneId} value={zone.zoneId}>
+                          {zone.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* Seat Label */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">座位標籤 *</label>
+                <input
+                  type="text"
+                  value={formData.seatLabel}
+                  onChange={(e) => setFormData({ ...formData, seatLabel: e.target.value })}
+                  placeholder="例如：A-12-5 或 搖滾區-15"
+                  className="input-field"
+                  required
+                />
+              </div>
+
+              {/* Face Value */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">票面價值 (NT$) *</label>
+                <input
+                  type="number"
+                  value={formData.faceValue}
+                  onChange={(e) => setFormData({ ...formData, faceValue: e.target.value })}
+                  placeholder="例如：6980"
+                  className="input-field"
+                  required
+                  min="0"
+                  step="1"
+                />
+              </div>
+
+              {/* Original Vendor */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">原始賣家</label>
+                <input
+                  type="text"
+                  value={formData.originalVendor}
+                  onChange={(e) => setFormData({ ...formData, originalVendor: e.target.value })}
+                  placeholder="例如：拓元售票、KKTIX、其他"
+                  className="input-field"
+                />
+              </div>
+
+              {/* Serial Number */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">票券序號</label>
+                <input
+                  type="text"
+                  value={formData.serialNo}
+                  onChange={(e) => setFormData({ ...formData, serialNo: e.target.value })}
+                  placeholder="選填，票券的序號"
+                  className="input-field"
+                />
+              </div>
+
+              {/* Price */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">售價 (NT$) *</label>
+                <input
+                  type="number"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  placeholder="設定售價"
+                  className="input-field"
+                  required
+                  min="0"
+                  step="1"
+                />
+              </div>
+
+              {/* Expires At */}
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">上架到期時間 *</label>
+                <input
+                  type="datetime-local"
+                  value={formData.expiresAt}
+                  onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
+                  className="input-field"
+                  required
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
+
+              <div className="flex space-x-4 pt-4">
+                <button
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setFormData({
+                      eventId: '',
+                      zoneId: '',
+                      seatLabel: '',
+                      faceValue: '',
+                      originalVendor: '',
+                      serialNo: '',
+                      price: '',
+                      expiresAt: '',
+                    });
+                    setSelectedEvent(null);
+                  }}
+                  className="flex-1 btn-secondary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleUploadTicket}
+                  disabled={submitting}
+                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? '處理中...' : '上架票券'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

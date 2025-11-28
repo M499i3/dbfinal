@@ -14,6 +14,7 @@ import {
 export default function HomePage() {
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -174,15 +175,29 @@ export default function HomePage() {
                   className="group card-hover rounded-2xl bg-[#12121a] border border-gray-800 overflow-hidden animate-slide-up"
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
-                  <div className="relative h-48 bg-gradient-to-br from-primary-900/50 to-accent-900/50 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-4xl font-display font-bold text-white/20 mb-2">
-                        {event.artist.charAt(0)}
+                  <div className="relative h-48 overflow-hidden bg-gradient-to-br from-primary-900/50 to-accent-900/50">
+                    {event.imageUrl && !imageErrors.has(event.eventId) ? (
+                      <img
+                        src={event.imageUrl}
+                        alt={event.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={() => {
+                          setImageErrors((prev) => new Set(prev).add(event.eventId));
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-4xl font-display font-bold text-white/20 mb-2">
+                            {event.artist.charAt(0)}
+                          </div>
+                          <div className="text-sm text-gray-500">{event.venue.city}</div>
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-500">{event.venue.city}</div>
-                    </div>
+                    )}
                     {event.availableTickets > 0 && (
-                      <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium">
+                      <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium backdrop-blur-sm">
                         {event.availableTickets} 張可售
                       </div>
                     )}

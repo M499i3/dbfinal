@@ -17,7 +17,7 @@ export default function EventDetailPage() {
         setLoading(true);
         const [eventData, ticketData] = await Promise.all([
           getEventById(parseInt(id)),
-          getAvailableTickets({ eventId: id }),
+          getAvailableTickets({ eventId: id.toString() }),
         ]);
         setEvent(eventData);
         setTickets(ticketData.tickets);
@@ -41,7 +41,7 @@ export default function EventDetailPage() {
   };
 
   const filteredTickets = selectedZone
-    ? tickets.filter((t) => t.zone.zoneId === selectedZone)
+    ? tickets.filter((t) => Number(t.zone.zoneId) === Number(selectedZone))
     : tickets;
 
   if (loading) {
@@ -80,15 +80,27 @@ export default function EventDetailPage() {
         {/* Event Header */}
         <div className="grid lg:grid-cols-3 gap-8 mb-12">
           <div className="lg:col-span-2">
-            <div className="relative rounded-2xl bg-gradient-to-br from-primary-900/50 to-accent-900/50 p-8 h-64 flex items-end">
-              <div className="absolute top-8 right-8 text-8xl font-display font-bold text-white/10">
-                {event.artist.charAt(0)}
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">
-                  {event.title}
-                </h1>
-                <p className="text-xl text-primary-400">{event.artist}</p>
+            <div className="relative rounded-2xl overflow-hidden h-64">
+              {event.imageUrl ? (
+                <img
+                  src={event.imageUrl}
+                  alt={event.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary-900/50 to-accent-900/50 flex items-end p-8">
+                  <div className="absolute top-8 right-8 text-8xl font-display font-bold text-white/10">
+                    {event.artist.charAt(0)}
+                  </div>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-end p-8">
+                <div>
+                  <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">
+                    {event.title}
+                  </h1>
+                  <p className="text-xl text-primary-400">{event.artist}</p>
+                </div>
               </div>
             </div>
           </div>

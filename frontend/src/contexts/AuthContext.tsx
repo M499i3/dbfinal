@@ -14,6 +14,12 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, phone: string, password: string) => Promise<void>;
+  registerBusinessOperator: (
+    name: string,
+    email: string,
+    phone: string,
+    password: string
+  ) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -68,7 +74,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (name: string, email: string, phone: string, password: string) => {
-    const response = await fetch('/api/auth/register', {
+    const response = await fetch('/api/auth/register/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, phone, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || '註冊失敗');
+    }
+
+    const data = await response.json();
+    localStorage.setItem('token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+  };
+
+  const registerBusinessOperator = async (
+    name: string,
+    email: string,
+    phone: string,
+    password: string
+  ) => {
+    const response = await fetch('/api/auth/register/business', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, phone, password }),
@@ -92,7 +121,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+    <AuthContext.Provider
+      value={{ user, token, login, register, registerBusinessOperator, logout, isLoading }}
+    >
       {children}
     </AuthContext.Provider>
   );

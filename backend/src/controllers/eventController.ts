@@ -6,7 +6,7 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
     const { artist, venue, date, status } = req.query;
 
     let query = `
-      SELECT e.event_id, e.artist, e.title, e.event_date, e.start_time, e.end_time, e.status,
+      SELECT e.event_id, e.artist, e.title, e.event_date, e.start_time, e.end_time, e.status, e.image_url,
              v.venue_id, v.name as venue_name, v.city, v.address,
              COUNT(DISTINCT li.ticket_id) as available_tickets,
              MIN(li.price) as min_price,
@@ -62,6 +62,7 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
         startTime: event.start_time,
         endTime: event.end_time,
         status: event.status,
+        imageUrl: event.image_url,
         venue: {
           venueId: event.venue_id,
           name: event.venue_name,
@@ -124,6 +125,7 @@ export const getEventById = async (req: Request, res: Response): Promise<void> =
       startTime: event.start_time,
       endTime: event.end_time,
       status: event.status,
+      imageUrl: event.image_url,
       venue: {
         venueId: event.venue_id,
         name: event.venue_name,

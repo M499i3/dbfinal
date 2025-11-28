@@ -33,7 +33,7 @@ async function createAllTables() {
       sql: `
         CREATE TABLE IF NOT EXISTS user_role (
           user_id BIGINT NOT NULL,
-          role VARCHAR(10) NOT NULL CHECK (role IN ('User', 'Admin')),
+          role VARCHAR(20) NOT NULL CHECK (role IN ('User', 'BusinessOperator', 'Admin')),
           PRIMARY KEY (user_id, role),
           FOREIGN KEY (user_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
         );
@@ -76,6 +76,7 @@ async function createAllTables() {
           start_time TIME NOT NULL,
           end_time TIME NOT NULL,
           status VARCHAR(20) NOT NULL DEFAULT 'Scheduled' CHECK (status IN ('Scheduled', 'Finished', 'Cancelled')),
+          image_url VARCHAR(500),
           FOREIGN KEY (venue_id) REFERENCES venue(venue_id) ON DELETE CASCADE ON UPDATE CASCADE
         );
       `,

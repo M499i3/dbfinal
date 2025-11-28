@@ -40,3 +40,23 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
   next();
 };
 
+export const requireBusinessOperator = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.user?.roles.includes('BusinessOperator') && !req.user?.roles.includes('Admin')) {
+    res.status(403).json({ error: '需要業務經營者權限' });
+    return;
+  }
+  next();
+};
+
+export const requireUser = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user?.roles.includes('User') && !req.user?.roles.includes('BusinessOperator') && !req.user?.roles.includes('Admin')) {
+    res.status(403).json({ error: '需要使用者權限' });
+    return;
+  }
+  next();
+};
+

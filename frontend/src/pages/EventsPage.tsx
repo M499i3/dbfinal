@@ -8,6 +8,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchEvents();
@@ -32,6 +33,13 @@ export default function EventsPage() {
       month: 'long',
       day: 'numeric',
     });
+  };
+
+  const isEventPast = (eventDate: string) => {
+    const eventDateObj = new Date(eventDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return eventDateObj < today;
   };
 
   const filteredEvents = events.filter((event) => {
@@ -61,6 +69,100 @@ export default function EventsPage() {
     );
   };
 
+  const EventCard = ({ event, index }: { event: Event; index: number }) => {
+    const isPast = isEventPast(event.eventDate);
+    const cardContent = (
+      <>
+        <div className="relative h-48 overflow-hidden bg-gradient-to-br from-primary-900/50 to-accent-900/50">
+          {event.imageUrl && !imageErrors.has(event.eventId) ? (
+            <img
+              src={event.imageUrl}
+              alt={event.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => {
+                setImageErrors((prev) => new Set(prev).add(event.eventId));
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary-900/50 to-accent-900/50 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-5xl font-display font-bold text-white/20 mb-2">
+                  {event.artist.charAt(0)}
+                </div>
+                <div className="text-sm text-gray-500">{event.venue.city}</div>
+              </div>
+            </div>
+          )}
+          <div className="absolute top-4 left-4">
+            {getStatusBadge(event.status)}
+          </div>
+          {event.availableTickets > 0 && !isPast && (
+            <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium backdrop-blur-sm">
+              {event.availableTickets} 張可售
+            </div>
+          )}
+        </div>
+        <div className="p-6">
+          <h3 className={`text-lg font-semibold mb-1 ${isPast ? 'text-gray-500' : 'text-white group-hover:text-primary-400 transition-colors'}`}>
+            {event.title}
+          </h3>
+          <p className={`text-sm mb-4 ${isPast ? 'text-gray-600' : 'text-gray-400'}`}>{event.artist}</p>
+          <div className="space-y-2 text-gray-500 text-sm">
+            <div className="flex items-center space-x-2">
+              <Calendar size={14} />
+              <span>{formatDate(event.eventDate)}</span>
+              <span className="text-gray-600">|</span>
+              <span>{event.startTime}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <MapPin size={14} />
+              <span>{event.venue.name}</span>
+            </div>
+          </div>
+          {event.priceRange.min && !isPast && (
+            <div className="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
+              <div>
+                <span className="text-gray-500 text-sm">票價從</span>
+                <span className="text-primary-400 font-semibold ml-2">
+                  NT$ {event.priceRange.min.toLocaleString()}
+                </span>
+              </div>
+              {event.priceRange.max && event.priceRange.max !== event.priceRange.min && (
+                <div className="text-gray-500 text-sm">
+                  ~ NT$ {event.priceRange.max.toLocaleString()}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </>
+    );
+
+    if (isPast) {
+      return (
+        <div
+          key={event.eventId}
+          className="rounded-2xl bg-[#12121a] border border-gray-700 overflow-hidden opacity-60 cursor-not-allowed animate-fade-in"
+          style={{ animationDelay: `${index * 50}ms` }}
+        >
+          {cardContent}
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={event.eventId}
+        to={`/events/${event.eventId}`}
+        className="group card-hover rounded-2xl bg-[#12121a] border border-gray-800 overflow-hidden animate-fade-in"
+        style={{ animationDelay: `${index * 50}ms` }}
+      >
+        {cardContent}
+      </Link>
+    );
+  };
+
   return (
     <div className="min-h-screen py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -77,21 +179,21 @@ export default function EventsPage() {
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
             <input
               type="text"
               placeholder="搜尋活動、藝人或場館..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-12"
+              className="input-field pr-12"
             />
           </div>
           <div className="relative">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="input-field pl-12 pr-8 appearance-none cursor-pointer min-w-[160px]"
+              className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
             >
               <option value="">全部狀態</option>
               <option value="Scheduled">即將舉行</option>
@@ -107,13 +209,12 @@ export default function EventsPage() {
             {[...Array(6)].map((_, i) => (
               <div
                 key={i}
-                className="rounded-2xl bg-[#12121a] border border-gray-800 overflow-hidden animate-pulse"
+                className="rounded-2xl bg-[#12121a] border border-gray-800 p-6 animate-pulse"
               >
-                <div className="h-48 bg-gray-800"></div>
-                <div className="p-6 space-y-3">
-                  <div className="h-4 bg-gray-800 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-800 rounded w-1/2"></div>
-                </div>
+                <div className="h-4 bg-gray-800 rounded w-1/3 mb-4"></div>
+                <div className="h-6 bg-gray-800 rounded w-2/3 mb-2"></div>
+                <div className="h-4 bg-gray-800 rounded w-1/2 mb-4"></div>
+                <div className="h-10 bg-gray-800 rounded"></div>
               </div>
             ))}
           </div>
@@ -128,62 +229,7 @@ export default function EventsPage() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEvents.map((event, index) => (
-              <Link
-                key={event.eventId}
-                to={`/events/${event.eventId}`}
-                className="group card-hover rounded-2xl bg-[#12121a] border border-gray-800 overflow-hidden animate-fade-in"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="relative h-48 bg-gradient-to-br from-primary-900/50 to-accent-900/50 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-5xl font-display font-bold text-white/20 mb-2">
-                      {event.artist.charAt(0)}
-                    </div>
-                    <div className="text-sm text-gray-500">{event.venue.city}</div>
-                  </div>
-                  <div className="absolute top-4 left-4">
-                    {getStatusBadge(event.status)}
-                  </div>
-                  {event.availableTickets > 0 && (
-                    <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium">
-                      {event.availableTickets} 張可售
-                    </div>
-                  )}
-                </div>
-                <div className="p-6">
-                  <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-primary-400 transition-colors">
-                    {event.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm mb-4">{event.artist}</p>
-                  <div className="space-y-2 text-gray-500 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <Calendar size={14} />
-                      <span>{formatDate(event.eventDate)}</span>
-                      <span className="text-gray-600">|</span>
-                      <span>{event.startTime}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <MapPin size={14} />
-                      <span>{event.venue.name}</span>
-                    </div>
-                  </div>
-                  {event.priceRange.min && (
-                    <div className="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
-                      <div>
-                        <span className="text-gray-500 text-sm">票價從</span>
-                        <span className="text-primary-400 font-semibold ml-2">
-                          NT$ {event.priceRange.min.toLocaleString()}
-                        </span>
-                      </div>
-                      {event.priceRange.max && event.priceRange.max !== event.priceRange.min && (
-                        <div className="text-gray-500 text-sm">
-                          ~ NT$ {event.priceRange.max.toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Link>
+              <EventCard key={event.eventId} event={event} index={index} />
             ))}
           </div>
         )}
@@ -191,4 +237,3 @@ export default function EventsPage() {
     </div>
   );
 }
-

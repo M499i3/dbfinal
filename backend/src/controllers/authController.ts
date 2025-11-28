@@ -3,63 +3,127 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../config/database.js';
 
-export const register = async (req: Request, res: Response): Promise<void> => {
+// 通用註冊函數（內部使用）
+const registerWithRole = async (
+  name: string,
+  email: string,
+  phone: string,
+  password: string,
+  role: 'User' | 'BusinessOperator'
+): Promise<{ user: any; token: string }> => {
+  // 檢查 email 是否已存在
+  const existingUser = await pool.query(
+    'SELECT user_id FROM "user" WHERE email = $1 OR phone = $2',
+    [email, phone]
+  );
+
+  if (existingUser.rows.length > 0) {
+    throw new Error('此電子郵件或電話號碼已被註冊');
+  }
+
+  // 加密密碼
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(password, salt);
+
+  // 建立使用者
+  const result = await pool.query(
+    `INSERT INTO "user" (name, email, phone, password_hash, kyc_level)
+     VALUES ($1, $2, $3, $4, 0)
+     RETURNING user_id, name, email, phone, kyc_level, created_at`,
+    [name, email, phone, passwordHash]
+  );
+
+  const newUser = result.rows[0];
+
+  // 為新使用者添加角色
+  await pool.query('INSERT INTO user_role (user_id, role) VALUES ($1, $2)', [
+    newUser.user_id,
+    role,
+  ]);
+
+  // 生成 JWT
+  const token = jwt.sign(
+    { userId: newUser.user_id, email: newUser.email, roles: [role] },
+    process.env.JWT_SECRET || 'default_secret',
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+
+  return {
+    user: {
+      userId: newUser.user_id,
+      name: newUser.name,
+      email: newUser.email,
+      phone: newUser.phone,
+      kycLevel: newUser.kyc_level,
+      createdAt: newUser.created_at,
+      roles: [role],
+    },
+    token,
+  };
+};
+
+// 一般使用者註冊
+export const registerUser = async (req: Request, res: Response): Promise<void> => {
   const { name, email, phone, password } = req.body;
 
   try {
-    // 檢查 email 是否已存在
-    const existingUser = await pool.query(
-      'SELECT user_id FROM "user" WHERE email = $1 OR phone = $2',
-      [email, phone]
-    );
-
-    if (existingUser.rows.length > 0) {
-      res.status(400).json({ error: '此電子郵件或電話號碼已被註冊' });
-      return;
-    }
-
-    // 加密密碼
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // 建立使用者
-    const result = await pool.query(
-      `INSERT INTO "user" (name, email, phone, password_hash, kyc_level)
-       VALUES ($1, $2, $3, $4, 0)
-       RETURNING user_id, name, email, phone, kyc_level, created_at`,
-      [name, email, phone, passwordHash]
-    );
-
-    const newUser = result.rows[0];
-
-    // 為新使用者添加 User 角色
-    await pool.query(
-      'INSERT INTO user_role (user_id, role) VALUES ($1, $2)',
-      [newUser.user_id, 'User']
-    );
-
-    // 生成 JWT
-    const token = jwt.sign(
-      { userId: newUser.user_id, email: newUser.email, roles: ['User'] },
-      process.env.JWT_SECRET || 'default_secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+    const { user, token } = await registerWithRole(name, email, phone, password, 'User');
 
     res.status(201).json({
       message: '註冊成功',
-      user: {
-        userId: newUser.user_id,
-        name: newUser.name,
-        email: newUser.email,
-        phone: newUser.phone,
-        kycLevel: newUser.kyc_level,
-        createdAt: newUser.created_at,
-      },
+      user,
       token,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('註冊錯誤:', error);
-    res.status(500).json({ error: '伺服器錯誤' });
+    res.status(400).json({ error: error.message || '伺服器錯誤' });
+  }
+};
+
+// 業務經營者註冊
+export const registerBusinessOperator = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { name, email, phone, password } = req.body;
+
+  try {
+    const { user, token } = await registerWithRole(
+      name,
+      email,
+      phone,
+      password,
+      'BusinessOperator'
+    );
+
+    res.status(201).json({
+      message: '業務經營者註冊成功',
+      user,
+      token,
+    });
+  } catch (error: any) {
+    console.error('註冊錯誤:', error);
+    res.status(400).json({ error: error.message || '伺服器錯誤' });
+  }
+};
+
+// 保留原有註冊端點（向後兼容，預設為 User）
+export const register = async (req: Request, res: Response): Promise<void> => {
+  const { name, email, phone, password, role } = req.body;
+  const userRole: 'User' | 'BusinessOperator' =
+    role === 'BusinessOperator' ? 'BusinessOperator' : 'User';
+
+  try {
+    const { user, token } = await registerWithRole(name, email, phone, password, userRole);
+
+    res.status(201).json({
+      message: '註冊成功',
+      user,
+      token,
+    });
+  } catch (error: any) {
+    console.error('註冊錯誤:', error);
+    res.status(400).json({ error: error.message || '伺服器錯誤' });
   }
 };
 
