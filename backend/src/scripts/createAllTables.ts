@@ -214,13 +214,29 @@ async function createAllTables() {
       `,
     },
     {
+      name: 'case',
+      sql: `
+        CREATE TABLE IF NOT EXISTS "case" (
+          case_id BIGSERIAL PRIMARY KEY,
+          order_id BIGINT NOT NULL,
+          reporter_id BIGINT NOT NULL,
+          type VARCHAR(30) NOT NULL CHECK (type IN ('Fraud', 'Delivery', 'Refund', 'Other')),
+          status VARCHAR(20) NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'InProgress', 'Closed')),
+          opened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          closed_at TIMESTAMP,
+          FOREIGN KEY (order_id) REFERENCES "order"(order_id) ON DELETE CASCADE ON UPDATE CASCADE,
+          FOREIGN KEY (reporter_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
+        );
+      `,
+    },
+    {
       name: 'risk_event',
       sql: `
         CREATE TABLE IF NOT EXISTS risk_event (
           risk_id BIGSERIAL PRIMARY KEY,
           user_id BIGINT NOT NULL,
           type VARCHAR(30) NOT NULL CHECK (type IN ('Login', 'Fraud', 'Transfer', 'Payment')),
-          ref_id BIGINT,
+          ref_id BIGINT NOT NULL,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           level INT NOT NULL CHECK (level >= 1 AND level <= 5),
           FOREIGN KEY (user_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -275,6 +291,9 @@ async function createAllTables() {
     'CREATE INDEX IF NOT EXISTS idx_order_created ON "order"(created_at)',
     'CREATE INDEX IF NOT EXISTS idx_review_reviewee ON review(reviewee_id)',
     'CREATE INDEX IF NOT EXISTS idx_review_order ON review(order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_case_order ON "case"(order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_case_reporter ON "case"(reporter_id)',
+    'CREATE INDEX IF NOT EXISTS idx_case_status ON "case"(status)',
     'CREATE INDEX IF NOT EXISTS idx_risk_user ON risk_event(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_risk_type ON risk_event(type)',
   ];
@@ -299,4 +318,6 @@ createAllTables().catch((error) => {
   console.error('建立資料表時發生錯誤:', error);
   process.exit(1);
 });
+
+
 

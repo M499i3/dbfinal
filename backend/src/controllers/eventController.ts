@@ -44,6 +44,11 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
       query += ` AND e.status = $${paramIndex}`;
       params.push(status);
       paramIndex++;
+      
+      // 如果狀態為 'Scheduled'，額外過濾掉已結束的活動
+      if (status === 'Scheduled') {
+        query += ` AND (e.event_date + e.start_time) > CURRENT_TIMESTAMP`;
+      }
     }
 
     query += `

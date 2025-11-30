@@ -93,5 +93,5 @@ INSERT INTO review (order_id, reviewer_id, reviewee_id, score, comment) VALUES
 
 -- 插入風險事件範例
 INSERT INTO risk_event (user_id, type, ref_id, level) VALUES
-(5, 'Login', NULL, 1);
+(5, 'Login', 5, 1);
 

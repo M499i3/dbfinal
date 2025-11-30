@@ -273,9 +273,10 @@ export const addToBlacklist = async (req: AuthRequest, res: Response): Promise<v
     );
 
     // 記錄風險事件
+    // 注意：加入黑名單時，ref_id 使用 user_id 作為參考
     await pool.query(
-      `INSERT INTO risk_event (user_id, type, level)
-       VALUES ($1, 'Fraud', 5)`,
+      `INSERT INTO risk_event (user_id, type, level, ref_id)
+       VALUES ($1, 'Fraud', 5, $1)`,
       [userId]
     );
 
@@ -491,6 +492,70 @@ export const getTransactionStats = async (req: AuthRequest, res: Response): Prom
 };
 
 // ==================== 申訴案件管理 ====================
+
+// 建立申訴案件（用戶端）
+export const createCase = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { orderId, type } = req.body;
+
+  try {
+    // 驗證類型
+    const validTypes = ['Fraud', 'Delivery', 'Refund', 'Other'];
+    if (!type || !validTypes.includes(type)) {
+      res.status(400).json({ error: '案件類型必須為：Fraud, Delivery, Refund, Other' });
+      return;
+    }
+
+    // 檢查訂單是否存在且屬於當前使用者
+    const orderCheck = await pool.query(
+      `SELECT order_id, buyer_id, status
+       FROM "order"
+       WHERE order_id = $1`,
+      [orderId]
+    );
+
+    if (orderCheck.rows.length === 0) {
+      res.status(404).json({ error: '訂單不存在' });
+      return;
+    }
+
+    const order = orderCheck.rows[0];
+
+    // 檢查訂單是否屬於當前使用者（買家可以提出申訴）
+    if (order.buyer_id !== userId) {
+      res.status(403).json({ error: '只能對自己的訂單提出申訴' });
+      return;
+    }
+
+    // 檢查是否已經對此訂單提出過申訴
+    const existingCase = await pool.query(
+      `SELECT case_id FROM "case" WHERE order_id = $1 AND reporter_id = $2`,
+      [orderId, userId]
+    );
+
+    if (existingCase.rows.length > 0) {
+      res.status(400).json({ error: '您已經對此訂單提出過申訴' });
+      return;
+    }
+
+    // 建立申訴案件
+    const result = await pool.query(
+      `INSERT INTO "case" (order_id, reporter_id, type, status)
+       VALUES ($1, $2, $3, 'Open')
+       RETURNING case_id, opened_at`,
+      [orderId, userId, type]
+    );
+
+    res.status(201).json({
+      message: '申訴案件已建立',
+      caseId: result.rows[0].case_id,
+      openedAt: result.rows[0].opened_at,
+    });
+  } catch (error) {
+    console.error('建立申訴案件錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
 
 // 獲取所有申訴案件
 export const getAllCases = async (req: AuthRequest, res: Response): Promise<void> => {

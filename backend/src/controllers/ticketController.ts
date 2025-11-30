@@ -21,7 +21,8 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
       JOIN listing l ON li.listing_id = l.listing_id AND l.status = 'Active'
       JOIN "user" u ON l.seller_id = u.user_id
       LEFT JOIN review r ON r.reviewee_id = l.seller_id
-      WHERE e.status = 'Scheduled' AND e.event_date >= CURRENT_DATE
+      WHERE e.status = 'Scheduled' 
+        AND (e.event_date + e.start_time) > CURRENT_TIMESTAMP
     `;
 
     const params: any[] = [];

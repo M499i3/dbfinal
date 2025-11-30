@@ -11,6 +11,22 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
   try {
     await client.query('BEGIN');
 
+    // 驗證價格是否為正整數
+    if (!prices || !Array.isArray(prices) || prices.length !== ticketIds.length) {
+      res.status(400).json({ error: '價格數量必須與票券數量一致' });
+      await client.query('ROLLBACK');
+      return;
+    }
+
+    for (let i = 0; i < prices.length; i++) {
+      const price = parseFloat(prices[i]);
+      if (isNaN(price) || price <= 0 || !Number.isInteger(price)) {
+        res.status(400).json({ error: '價格必須為正整數' });
+        await client.query('ROLLBACK');
+        return;
+      }
+    }
+
     // 檢查使用者是否擁有這些票券
     const ticketCheck = await client.query(
       `SELECT ticket_id FROM ticket 
@@ -131,14 +147,30 @@ export const cancelListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // 檢查是否有票券已經售出
+    const soldItemsCheck = await pool.query(
+      `SELECT COUNT(*) as sold_count
+       FROM listing_item
+       WHERE listing_id = $1 AND status = 'Sold'`,
+      [id]
+    );
+
+    const soldCount = parseInt(soldItemsCheck.rows[0].sold_count);
+
+    if (soldCount > 0) {
+      res.status(400).json({ error: '無法取消上架：此上架中已有票券售出' });
+      return;
+    }
+
     // 更新上架狀態
     await pool.query(
       `UPDATE listing SET status = 'Cancelled' WHERE listing_id = $1`,
       [id]
     );
 
+    // 只更新未售出的上架項目狀態
     await pool.query(
-      `UPDATE listing_item SET status = 'Cancelled' WHERE listing_id = $1`,
+      `UPDATE listing_item SET status = 'Cancelled' WHERE listing_id = $1 AND status = 'Active'`,
       [id]
     );
 

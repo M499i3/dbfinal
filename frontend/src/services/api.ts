@@ -90,6 +90,13 @@ export const createReview = (data: CreateReviewData) =>
 export const getUserReviews = (userId: number) =>
   fetchAPI<UserReviews>(`/users/${userId}/reviews`);
 
+// Cases
+export const createCase = (data: CreateCaseData) =>
+  fetchAPI<{ message: string; caseId: number }>('/cases', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
 // Types
 export interface Event {
   eventId: number;
@@ -206,6 +213,8 @@ export interface Order {
   orderId: number;
   createdAt: string;
   status: string;
+  hasReviewed?: boolean;
+  hasCase?: boolean;
   payment: {
     paymentId: number;
     method: string;
@@ -221,6 +230,7 @@ export interface Order {
     artist: string;
     eventDate: string;
     zoneName: string;
+    sellerId: number;
     sellerName: string;
   }[];
 }
@@ -244,7 +254,7 @@ export interface CreateReviewData {
   orderId: number;
   revieweeId: number;
   score: number;
-  comment: string;
+  comment?: string;
 }
 
 export interface UserReviews {
@@ -260,5 +270,10 @@ export interface UserReviews {
       name: string;
     };
   }[];
+}
+
+export interface CreateCaseData {
+  orderId: number;
+  type: 'Fraud' | 'Delivery' | 'Refund' | 'Other';
 }
 

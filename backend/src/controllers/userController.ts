@@ -27,7 +27,7 @@ export const getSellerProfile = async (req: Request, res: Response): Promise<voi
 
     const seller = userResult.rows[0];
 
-    // 獲取賣家所有上架的票券
+    // 獲取賣家所有上架的票券（排除已過期的活動）
     const listingsResult = await pool.query(
       `SELECT t.ticket_id, t.seat_label, t.face_value, t.original_vendor, t.serial_no,
               e.event_id, e.artist, e.title, e.event_date, e.start_time, e.image_url,
@@ -42,6 +42,8 @@ export const getSellerProfile = async (req: Request, res: Response): Promise<voi
        WHERE l.seller_id = $1
        AND l.status = 'Active'
        AND li.status = 'Active'
+       AND e.status = 'Scheduled'
+       AND (e.event_date + e.start_time) > CURRENT_TIMESTAMP
        ORDER BY l.created_at DESC`,
       [sellerId]
     );

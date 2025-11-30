@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS risk_event (
     risk_id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('Login', 'Fraud', 'Transfer', 'Payment')),
-    ref_id BIGINT,
+    ref_id BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     level INT NOT NULL CHECK (level >= 1 AND level <= 5),
     FOREIGN KEY (user_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -245,4 +245,9 @@ CREATE INDEX idx_review_order ON review(order_id);
 -- 風險相關索引
 CREATE INDEX idx_risk_user ON risk_event(user_id);
 CREATE INDEX idx_risk_type ON risk_event(type);
+
+-- 申訴案件相關索引
+CREATE INDEX idx_case_order ON "case"(order_id);
+CREATE INDEX idx_case_reporter ON "case"(reporter_id);
+CREATE INDEX idx_case_status ON "case"(status);
 

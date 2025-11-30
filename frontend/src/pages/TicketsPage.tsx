@@ -39,6 +39,7 @@ export default function TicketsPage() {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-TW', {
+      year: 'numeric',
       month: 'short',
       day: 'numeric',
     });

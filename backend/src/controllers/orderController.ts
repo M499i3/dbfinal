@@ -107,8 +107,11 @@ export const getMyOrders = async (req: AuthRequest, res: Response): Promise<void
                 'artist', e.artist,
                 'eventDate', e.event_date,
                 'zoneName', sz.name,
+                'sellerId', u.user_id,
                 'sellerName', u.name
-              )) as items
+              )) as items,
+              (SELECT COUNT(*) > 0 FROM review WHERE order_id = o.order_id AND reviewer_id = $1) as has_reviewed,
+              (SELECT COUNT(*) > 0 FROM "case" WHERE order_id = o.order_id AND reporter_id = $1) as has_case
        FROM "order" o
        LEFT JOIN payment p ON o.order_id = p.order_id
        JOIN order_item oi ON o.order_id = oi.order_id
@@ -128,6 +131,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response): Promise<void
         orderId: order.order_id,
         createdAt: order.created_at,
         status: order.status,
+        hasReviewed: order.has_reviewed || false,
+        hasCase: order.has_case || false,
         payment: {
           paymentId: order.payment_id,
           method: order.method,

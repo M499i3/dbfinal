@@ -36,6 +36,7 @@ import {
   getAllOrders,
   getOrderDetails,
   getTransactionStats,
+  createCase,
   getAllCases,
   updateCaseStatus,
   getSystemLogs,
@@ -75,6 +76,9 @@ router.post('/orders/:id/cancel', authenticate, cancelOrder);
 router.post('/reviews', authenticate, createReview);
 router.get('/users/:userId/reviews', getUserReviews);
 router.get('/sellers/:sellerId', getSellerProfile); // 獲取賣家資料
+
+// ==================== 申訴案件路由 ====================
+router.post('/cases', authenticate, createCase);
 
 // ==================== 業務經營者路由 ====================
 // 場館管理

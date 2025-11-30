@@ -131,6 +131,13 @@ export default function MyListingsPage() {
       return;
     }
 
+    // 驗證價格為正整數
+    const price = parseFloat(formData.price);
+    if (isNaN(price) || price <= 0 || !Number.isInteger(price)) {
+      alert('售價必須為正整數');
+      return;
+    }
+
     try {
       setSubmitting(true);
       
@@ -147,7 +154,7 @@ export default function MyListingsPage() {
       // 然後創建上架
       await createListing({
         ticketIds: [ticketResult.ticket.ticket_id],
-        prices: [parseFloat(formData.price)],
+        prices: [price],
         expiresAt: formData.expiresAt,
       });
 
@@ -419,13 +426,34 @@ export default function MyListingsPage() {
                 <input
                   type="number"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  placeholder="設定售價"
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // 只允許輸入正整數（包括空字串用於清除）
+                    if (value === '') {
+                      setFormData({ ...formData, price: '' });
+                    } else {
+                      const num = parseInt(value, 10);
+                      if (!isNaN(num) && num > 0 && value === num.toString()) {
+                        setFormData({ ...formData, price: value });
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // 失去焦點時驗證並修正
+                    const value = e.target.value;
+                    const num = parseInt(value, 10);
+                    if (value && (isNaN(num) || num <= 0)) {
+                      alert('價格必須為正整數');
+                      setFormData({ ...formData, price: '' });
+                    }
+                  }}
+                  placeholder="設定售價（必須為正整數）"
                   className="input-field"
                   required
-                  min="0"
+                  min="1"
                   step="1"
                 />
+                <p className="text-gray-500 text-xs mt-1">價格必須為正整數（例如：1000）</p>
               </div>
 
               {/* Expires At */}

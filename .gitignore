@@ -71,4 +71,13 @@ desktop.ini
 .tmp/
 .temp/
 
+# Database migration temporary files (keep migration SQL files)
+*.sql.bak
+*.sql.tmp
+
+# Package manager lock files (optional - some teams prefer to commit these)
+# Uncomment if you don't want to commit lock files
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
 
