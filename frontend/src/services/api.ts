@@ -90,6 +90,25 @@ export const createReview = (data: CreateReviewData) =>
 export const getUserReviews = (userId: number) =>
   fetchAPI<UserReviews>(`/users/${userId}/reviews`);
 
+// Venues (Business)
+export const createVenue = (data: CreateVenueData) =>
+  fetchAPI<{ message: string; venue: any }>('/business/venues', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getVenues = () =>
+  fetchAPI<{ venues: Venue[] }>('/business/venues');
+
+export const getVenueById = (id: number) =>
+  fetchAPI<{ venue: Venue }>(`/business/venues/${id}`);
+
+export const updateVenue = (id: number, data: CreateVenueData) =>
+  fetchAPI<{ message: string; venue: any }>(`/business/venues/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
 // Types
 export interface Event {
   eventId: number;
@@ -260,5 +279,18 @@ export interface UserReviews {
       name: string;
     };
   }[];
+}
+
+export interface Venue {
+  venue_id: number;
+  name: string;
+  city: string;
+  address: string;
+}
+
+export interface CreateVenueData {
+  name: string;
+  city: string;
+  address: string;
 }
 

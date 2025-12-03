@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import pool from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { getRiskFlags } from '../utils/riskAssessment.js';
 
 // ==================== 票券與刊登管理 ====================
 
@@ -39,7 +40,15 @@ export const getAllListings = async (req: AuthRequest, res: Response): Promise<v
 
     const result = await pool.query(query, params);
 
-    res.json({ listings: result.rows });
+    // Fetch risk flags for each listing
+    const listingsWithRiskFlags = await Promise.all(
+      result.rows.map(async (listing) => {
+        const riskFlags = await getRiskFlags(listing.listing_id);
+        return { ...listing, risk_flags: riskFlags };
+      })
+    );
+
+    res.json({ listings: listingsWithRiskFlags });
   } catch (error) {
     console.error('獲取上架列表錯誤:', error);
     res.status(500).json({ error: '伺服器錯誤' });
@@ -65,7 +74,7 @@ export const getListingDetails = async (req: AuthRequest, res: Response): Promis
     }
 
     const itemsResult = await pool.query(
-      `SELECT li.*, t.ticket_id, t.seat_label, t.face_value, t.serial_no,
+      `SELECT li.price, t.ticket_id, t.seat_label, t.face_value, t.serial_no,
               e.title as event_title, e.artist, e.event_date,
               sz.name as zone_name
        FROM listing_item li
@@ -76,9 +85,28 @@ export const getListingDetails = async (req: AuthRequest, res: Response): Promis
       [id]
     );
 
+    // Get risk flags
+    const riskFlags = await getRiskFlags(Number(id));
+
+    // Format tickets
+    const tickets = itemsResult.rows.map((item) => ({
+      ticketId: item.ticket_id,
+      eventTitle: item.event_title,
+      artist: item.artist,
+      eventDate: item.event_date,
+      zoneName: item.zone_name,
+      seatLabel: item.seat_label,
+      faceValue: parseFloat(item.face_value),
+      price: parseFloat(item.price),
+      serialNo: item.serial_no,
+    }));
+
     res.json({
-      listing: listingResult.rows[0],
-      items: itemsResult.rows,
+      listing: {
+        ...listingResult.rows[0],
+        risk_flags: riskFlags,
+        tickets,
+      },
     });
   } catch (error) {
     console.error('獲取上架詳情錯誤:', error);
@@ -500,12 +528,17 @@ export const getAllCases = async (req: AuthRequest, res: Response): Promise<void
     let query = `
       SELECT c.*, 
              u1.name as reporter_name, u1.email as reporter_email,
-             o.order_id, o.status as order_status,
-             o.buyer_id, u2.name as buyer_name
+             o.order_id, o.status as order_status, o.buyer_id,
+             u_buyer.name as buyer_name,
+             l.seller_id,
+             u_seller.name as seller_name
       FROM "case" c
       JOIN "user" u1 ON c.reporter_id = u1.user_id
       JOIN "order" o ON c.order_id = o.order_id
-      LEFT JOIN "user" u2 ON o.buyer_id = u2.user_id
+      LEFT JOIN "user" u_buyer ON o.buyer_id = u_buyer.user_id
+      LEFT JOIN order_item oi ON o.order_id = oi.order_id
+      LEFT JOIN listing l ON oi.listing_id = l.listing_id
+      LEFT JOIN "user" u_seller ON l.seller_id = u_seller.user_id
       WHERE 1=1
     `;
 
@@ -529,21 +562,90 @@ export const getAllCases = async (req: AuthRequest, res: Response): Promise<void
     const result = await pool.query(query, params);
 
     res.json({
-      cases: result.rows.map((c) => ({
-        caseId: c.case_id,
-        orderId: c.order_id,
-        complainantId: c.reporter_id,
-        complainantName: c.reporter_name,
-        respondentId: c.buyer_id || null,
-        respondentName: c.buyer_name || '未知',
-        type: c.type,
-        description: c.description || '',
-        status: c.status,
-        createdAt: c.opened_at,
-      })),
+      cases: result.rows.map((c) => {
+        // Determine respondent: if reporter is buyer, respondent is seller (and vice versa)
+        const isBuyerReporter = c.reporter_id === c.buyer_id;
+        const respondentId = isBuyerReporter ? c.seller_id : c.buyer_id;
+        const respondentName = isBuyerReporter ? c.seller_name : c.buyer_name;
+        
+        return {
+          caseId: c.case_id,
+          orderId: c.order_id,
+          complainantId: c.reporter_id,
+          complainantName: c.reporter_name,
+          respondentId: respondentId || null,
+          respondentName: respondentName || '未知',
+          type: c.type,
+          description: c.description || '',
+          status: c.status,
+          createdAt: c.opened_at,
+        };
+      }),
     });
   } catch (error) {
     console.error('獲取申訴案件錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 獲取案件詳情
+export const getCaseDetails = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  try {
+    // Get case info
+    const caseResult = await pool.query(
+      `SELECT c.*, 
+              u1.name as reporter_name, u1.email as reporter_email
+       FROM "case" c
+       JOIN "user" u1 ON c.reporter_id = u1.user_id
+       WHERE c.case_id = $1`,
+      [id]
+    );
+
+    if (caseResult.rows.length === 0) {
+      res.status(404).json({ error: '案件不存在' });
+      return;
+    }
+
+    const caseData = caseResult.rows[0];
+
+    // Get order details
+    const orderResult = await pool.query(
+      `SELECT o.*, 
+              u_buyer.user_id as buyer_id, u_buyer.name as buyer_name, u_buyer.email as buyer_email,
+              u_seller.user_id as seller_id, u_seller.name as seller_name, u_seller.email as seller_email,
+              p.amount as total_amount
+       FROM "order" o
+       LEFT JOIN "user" u_buyer ON o.buyer_id = u_buyer.user_id
+       LEFT JOIN order_item oi ON o.order_id = oi.order_id
+       LEFT JOIN listing l ON oi.listing_id = l.listing_id
+       LEFT JOIN "user" u_seller ON l.seller_id = u_seller.user_id
+       LEFT JOIN payment p ON o.order_id = p.order_id AND p.status = 'Success'
+       WHERE o.order_id = $1
+       LIMIT 1`,
+      [caseData.order_id]
+    );
+
+    // Get tickets in the order
+    const ticketsResult = await pool.query(
+      `SELECT t.ticket_id, e.title as event_title, t.seat_label, oi.unit_price as price
+       FROM order_item oi
+       JOIN ticket t ON oi.ticket_id = t.ticket_id
+       JOIN event e ON t.event_id = e.event_id
+       WHERE oi.order_id = $1`,
+      [caseData.order_id]
+    );
+
+    res.json({
+      case: {
+        ...caseData,
+        order_details: orderResult.rows[0] || null,
+        tickets: ticketsResult.rows,
+      },
+    });
+  } catch (error) {
+    console.error('獲取案件詳情錯誤:', error);
     res.status(500).json({ error: '伺服器錯誤' });
   }
 };
@@ -579,6 +681,196 @@ export const updateCaseStatus = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error) {
     console.error('更新申訴案件錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 開始處理案件
+export const startCaseProcessing = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `UPDATE "case" 
+       SET status = 'InProgress'
+       WHERE case_id = $1 AND status = 'Open'
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: '案件不存在或狀態不正確' });
+      return;
+    }
+
+    res.json({ message: '案件已標記為處理中' });
+  } catch (error) {
+    console.error('開始處理案件錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 結案
+export const closeCase = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { resolution } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE "case" 
+       SET status = 'Closed', closed_at = CURRENT_TIMESTAMP, resolution = $2
+       WHERE case_id = $1 AND (status = 'Open' OR status = 'InProgress')
+       RETURNING *`,
+      [id, resolution]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: '案件不存在或已結案' });
+      return;
+    }
+
+    res.json({ message: '案件已結案', resolution });
+  } catch (error) {
+    console.error('結案錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 處理退款 (Fair process - requires evidence/justification)
+export const processCaseRefund = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { refundAmount, refundReason, refundType } = req.body;
+  const operatorId = req.user?.userId;
+
+  try {
+    await pool.query('BEGIN');
+
+    // Get case and order info
+    const caseResult = await pool.query(
+      `SELECT c.*, o.buyer_id, o.status as order_status
+       FROM "case" c
+       JOIN "order" o ON c.order_id = o.order_id
+       WHERE c.case_id = $1`,
+      [id]
+    );
+
+    if (caseResult.rows.length === 0) {
+      res.status(404).json({ error: '案件不存在' });
+      await pool.query('ROLLBACK');
+      return;
+    }
+
+    const caseData = caseResult.rows[0];
+
+    // Check if order can be refunded
+    if (caseData.order_status !== 'Paid' && caseData.order_status !== 'Completed') {
+      res.status(400).json({ error: '此訂單狀態無法退款' });
+      await pool.query('ROLLBACK');
+      return;
+    }
+
+    // Create refund record in payment table
+    await pool.query(
+      `INSERT INTO payment (order_id, method, amount, status, paid_at)
+       VALUES ($1, 'Refund', $2, 'Success', CURRENT_TIMESTAMP)`,
+      [caseData.order_id, -Math.abs(refundAmount)] // Negative amount for refund
+    );
+
+    // Update order status to Cancelled (refunded)
+    await pool.query(
+      `UPDATE "order" 
+       SET status = 'Cancelled'
+       WHERE order_id = $1`,
+      [caseData.order_id]
+    );
+
+    // If full refund, return tickets to sellers
+    if (refundType === 'full') {
+      // Update listing_item status back to Active (re-list tickets)
+      await pool.query(
+        `UPDATE listing_item li
+         SET status = 'Active'
+         FROM order_item oi
+         WHERE oi.order_id = $1 
+         AND li.listing_id = oi.listing_id 
+         AND li.ticket_id = oi.ticket_id`,
+        [caseData.order_id]
+      );
+
+      // Update listing status back to Active
+      await pool.query(
+        `UPDATE listing l
+         SET status = 'Active'
+         FROM order_item oi
+         WHERE oi.order_id = $1 
+         AND l.listing_id = oi.listing_id`,
+        [caseData.order_id]
+      );
+    }
+
+    // Add refund note to case
+    await pool.query(
+      `INSERT INTO case_note (case_id, operator_id, note_type, content, is_internal)
+       VALUES ($1, $2, 'Decision', $3, false)`,
+      [id, operatorId, `退款處理：${refundType === 'full' ? '全額退款' : '部分退款'} NT$${refundAmount}。原因：${refundReason}`]
+    );
+
+    await pool.query('COMMIT');
+
+    res.json({ 
+      message: '退款處理成功',
+      refundAmount,
+      refundType,
+    });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('退款處理錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 新增案件備註
+export const addCaseNote = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { noteType, content, isInternal } = req.body;
+  const operatorId = req.user?.userId;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO case_note (case_id, operator_id, note_type, content, is_internal)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *, 
+       (SELECT name FROM "user" WHERE user_id = $2) as operator_name`,
+      [id, operatorId, noteType, content, isInternal ?? true]
+    );
+
+    res.json({
+      message: '備註已新增',
+      note: result.rows[0],
+    });
+  } catch (error) {
+    console.error('新增備註錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 獲取案件備註
+export const getCaseNotes = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT cn.*, u.name as operator_name
+       FROM case_note cn
+       JOIN "user" u ON cn.operator_id = u.user_id
+       WHERE cn.case_id = $1
+       ORDER BY cn.created_at ASC`,
+      [id]
+    );
+
+    res.json({ notes: result.rows });
+  } catch (error) {
+    console.error('獲取備註錯誤:', error);
     res.status(500).json({ error: '伺服器錯誤' });
   }
 };
@@ -658,6 +950,117 @@ export const getSystemLogs = async (req: AuthRequest, res: Response): Promise<vo
     res.json({ logs: logsWithUsers });
   } catch (error) {
     console.error('獲取系統紀錄錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// ==================== 上架審核 ====================
+
+// 批准上架
+export const approveListing = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const reviewerId = req.user?.userId;
+
+  try {
+    await pool.query('BEGIN');
+
+    // 檢查上架是否存在且為待審核狀態
+    const listingCheck = await pool.query(
+      `SELECT listing_id FROM listing WHERE listing_id = $1 AND status = 'Pending'`,
+      [id]
+    );
+
+    if (listingCheck.rows.length === 0) {
+      res.status(404).json({ error: '上架不存在或不是待審核狀態' });
+      await pool.query('ROLLBACK');
+      return;
+    }
+
+    // 更新上架狀態為 Active
+    await pool.query(
+      `UPDATE listing 
+       SET status = 'Active', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP
+       WHERE listing_id = $2`,
+      [reviewerId, id]
+    );
+
+    // 更新所有上架項目狀態
+    await pool.query(
+      `UPDATE listing_item 
+       SET status = 'Active' 
+       WHERE listing_id = $1`,
+      [id]
+    );
+
+    await pool.query('COMMIT');
+
+    res.json({ message: '上架已批准' });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('批准上架錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 拒絕上架
+export const rejectListing = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const reviewerId = req.user?.userId;
+
+  try {
+    await pool.query('BEGIN');
+
+    // 檢查上架是否存在且為待審核狀態
+    const listingCheck = await pool.query(
+      `SELECT listing_id FROM listing WHERE listing_id = $1 AND status = 'Pending'`,
+      [id]
+    );
+
+    if (listingCheck.rows.length === 0) {
+      res.status(404).json({ error: '上架不存在或不是待審核狀態' });
+      await pool.query('ROLLBACK');
+      return;
+    }
+
+    // 更新上架狀態為 Rejected
+    await pool.query(
+      `UPDATE listing 
+       SET status = 'Rejected', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP, rejection_reason = $3
+       WHERE listing_id = $2`,
+      [reviewerId, id, reason]
+    );
+
+    // 更新所有上架項目狀態
+    await pool.query(
+      `UPDATE listing_item 
+       SET status = 'Cancelled' 
+       WHERE listing_id = $1`,
+      [id]
+    );
+
+    // 如果提供了拒絕原因，可以記錄到風險事件
+    if (reason) {
+      const sellerResult = await pool.query(
+        'SELECT seller_id FROM listing WHERE listing_id = $1',
+        [id]
+      );
+      
+      if (sellerResult.rows.length > 0) {
+        await pool.query(
+          `INSERT INTO risk_event (user_id, type, level, ref_id)
+           VALUES ($1, 'Fraud', 2, $2)`,
+          [sellerResult.rows[0].seller_id, id]
+        );
+      }
+    }
+
+    await pool.query('COMMIT');
+
+    res.json({ message: '上架已拒絕' });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('拒絕上架錯誤:', error);
     res.status(500).json({ error: '伺服器錯誤' });
   }
 };

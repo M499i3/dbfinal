@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, Clock } from 'lucide-react';
 
 interface Venue {
@@ -10,11 +10,25 @@ interface Venue {
   address: string;
 }
 
-export default function BusinessCreateEventPage() {
+interface Event {
+  event_id: number;
+  venue_id: number;
+  artist: string;
+  title: string;
+  event_date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+}
+
+export default function BusinessEditEventPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     venueId: '',
     artist: '',
@@ -31,7 +45,8 @@ export default function BusinessCreateEventPage() {
       return;
     }
     fetchVenues();
-  }, [user, navigate]);
+    fetchEventData();
+  }, [user, navigate, id]);
 
   const fetchVenues = async () => {
     try {
@@ -47,13 +62,53 @@ export default function BusinessCreateEventPage() {
     }
   };
 
+  const fetchEventData = async () => {
+    if (!id) {
+      setError('無效的活動ID');
+      setFetchLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/business/events/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const event = data.event;
+        
+        if (event) {
+          setFormData({
+            venueId: event.venue_id.toString(),
+            artist: event.artist,
+            title: event.title,
+            eventDate: event.event_date.split('T')[0], // Format date
+            startTime: event.start_time,
+            endTime: event.end_time,
+            status: event.status,
+          });
+        } else {
+          setError('活動不存在');
+        }
+      } else {
+        setError('獲取活動資料失敗');
+      }
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      setError('獲取活動資料失敗');
+    } finally {
+      setFetchLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await fetch('/api/business/events', {
-        method: 'POST',
+      const response = await fetch(`/api/business/events/${id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -65,11 +120,11 @@ export default function BusinessCreateEventPage() {
         navigate('/business/events');
       } else {
         const error = await response.json();
-        alert(error.error || '建立活動失敗');
+        alert(error.error || '更新活動失敗');
       }
     } catch (error) {
-      console.error('Error creating event:', error);
-      alert('建立活動失敗');
+      console.error('Error updating event:', error);
+      alert('更新活動失敗');
     } finally {
       setLoading(false);
     }
@@ -77,6 +132,14 @@ export default function BusinessCreateEventPage() {
 
   if (!user || !user.roles.includes('BusinessOperator')) {
     return null;
+  }
+
+  if (fetchLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -91,9 +154,15 @@ export default function BusinessCreateEventPage() {
         </button>
 
         <div className="mb-8">
-          <h1 className="text-4xl font-display font-bold text-white mb-2">建立新活動</h1>
-          <p className="text-gray-400">填寫活動資訊以建立新活動</p>
+          <h1 className="text-4xl font-display font-bold text-white mb-2">編輯活動</h1>
+          <p className="text-gray-400">更新活動資訊</p>
         </div>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-6">
+            <p className="text-red-500 text-sm">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -114,18 +183,6 @@ export default function BusinessCreateEventPage() {
                 ))}
               </select>
             </div>
-            {venues.length === 0 && (
-              <p className="text-gray-500 text-sm mt-2">
-                尚無場館，請先{' '}
-                <button
-                  type="button"
-                  onClick={() => navigate('/business/venues')}
-                  className="text-primary-400 hover:underline"
-                >
-                  建立場館
-                </button>
-              </p>
-            )}
           </div>
 
           <div>
@@ -225,7 +282,7 @@ export default function BusinessCreateEventPage() {
               disabled={loading}
               className="btn-primary flex-1 disabled:opacity-50"
             >
-              {loading ? '建立中...' : '建立活動'}
+              {loading ? '更新中...' : '更新活動'}
             </button>
           </div>
         </form>

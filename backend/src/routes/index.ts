@@ -15,12 +15,15 @@ import { getSellerProfile } from '../controllers/userController.js';
 import {
   createVenue,
   getMyVenues,
+  getVenueById,
   updateVenue,
   createEvent,
   getMyEvents,
+  getEventByIdForBusiness,
   updateEvent,
   createSeatZone,
   getSeatZonesByVenue,
+  getAllTickets,
   createTicketForBusiness,
   getBusinessStats,
 } from '../controllers/businessController.js';
@@ -28,6 +31,8 @@ import {
   getAllListings,
   getListingDetails,
   takeDownListing,
+  approveListing,
+  rejectListing,
   getAllUsers,
   getUserDetails,
   addToBlacklist,
@@ -37,7 +42,13 @@ import {
   getOrderDetails,
   getTransactionStats,
   getAllCases,
+  getCaseDetails,
   updateCaseStatus,
+  startCaseProcessing,
+  closeCase,
+  processCaseRefund,
+  addCaseNote,
+  getCaseNotes,
   getSystemLogs,
 } from '../controllers/businessManagementController.js';
 import { authenticate, requireBusinessOperator } from '../middleware/auth.js';
@@ -80,11 +91,13 @@ router.get('/sellers/:sellerId', getSellerProfile); // 獲取賣家資料
 // 場館管理
 router.post('/business/venues', authenticate, requireBusinessOperator, createVenue);
 router.get('/business/venues', authenticate, requireBusinessOperator, getMyVenues);
+router.get('/business/venues/:id', authenticate, requireBusinessOperator, getVenueById);
 router.put('/business/venues/:id', authenticate, requireBusinessOperator, updateVenue);
 
 // 活動管理
 router.post('/business/events', authenticate, requireBusinessOperator, createEvent);
 router.get('/business/events', authenticate, requireBusinessOperator, getMyEvents);
+router.get('/business/events/:id', authenticate, requireBusinessOperator, getEventByIdForBusiness);
 router.put('/business/events/:id', authenticate, requireBusinessOperator, updateEvent);
 
 // 座位區域管理
@@ -92,6 +105,7 @@ router.post('/business/seat-zones', authenticate, requireBusinessOperator, creat
 router.get('/business/venues/:venueId/seat-zones', authenticate, requireBusinessOperator, getSeatZonesByVenue);
 
 // 票券管理
+router.get('/business/tickets', authenticate, requireBusinessOperator, getAllTickets);
 router.post('/business/tickets', authenticate, requireBusinessOperator, createTicketForBusiness);
 
 // 統計資料
@@ -102,6 +116,8 @@ router.get('/business/stats', authenticate, requireBusinessOperator, getBusiness
 router.get('/business/listings', authenticate, requireBusinessOperator, getAllListings);
 router.get('/business/listings/:id', authenticate, requireBusinessOperator, getListingDetails);
 router.post('/business/listings/:id/take-down', authenticate, requireBusinessOperator, takeDownListing);
+router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
+router.post('/business/listings/:id/reject', authenticate, requireBusinessOperator, rejectListing);
 
 // 用戶與風險管理
 router.get('/business/users', authenticate, requireBusinessOperator, getAllUsers);
@@ -117,6 +133,12 @@ router.get('/business/transactions/stats', authenticate, requireBusinessOperator
 
 // 申訴案件管理
 router.get('/business/cases', authenticate, requireBusinessOperator, getAllCases);
+router.get('/business/cases/:id', authenticate, requireBusinessOperator, getCaseDetails);
+router.post('/business/cases/:id/start', authenticate, requireBusinessOperator, startCaseProcessing);
+router.post('/business/cases/:id/close', authenticate, requireBusinessOperator, closeCase);
+router.post('/business/cases/:id/refund', authenticate, requireBusinessOperator, processCaseRefund);
+router.post('/business/cases/:id/notes', authenticate, requireBusinessOperator, addCaseNote);
+router.get('/business/cases/:id/notes', authenticate, requireBusinessOperator, getCaseNotes);
 router.put('/business/cases/:id/status', authenticate, requireBusinessOperator, updateCaseStatus);
 
 // 系統紀錄查詢

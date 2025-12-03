@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { assessListingRisk, saveRiskFlags } from '../utils/riskAssessment.js';
 
 export const createListing = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user?.userId;
@@ -24,45 +25,74 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 檢查票券是否已經上架
+    // 檢查票券是否已經上架（包括待審核和進行中的）
     const activeListingCheck = await client.query(
       `SELECT li.ticket_id FROM listing_item li
        JOIN listing l ON li.listing_id = l.listing_id
-       WHERE li.ticket_id = ANY($1) AND li.status = 'Active' AND l.status = 'Active'`,
+       WHERE li.ticket_id = ANY($1) AND (l.status = 'Active' OR l.status = 'Pending')`,
       [ticketIds]
     );
 
     if (activeListingCheck.rows.length > 0) {
-      res.status(400).json({ error: '部分票券已經在上架中' });
+      res.status(400).json({ error: '部分票券已經在上架中或等待審核' });
       await client.query('ROLLBACK');
       return;
     }
 
+    // Get ticket details with face values for risk assessment
+    const ticketDetails = await client.query(
+      `SELECT ticket_id, face_value FROM ticket WHERE ticket_id = ANY($1)`,
+      [ticketIds]
+    );
+
+    const ticketsForAssessment = ticketDetails.rows.map((ticket, index) => ({
+      ticketId: ticket.ticket_id,
+      price: parseFloat(prices[index]),
+      faceValue: parseFloat(ticket.face_value),
+    }));
+
+    // Perform risk assessment
+    const riskFlags = await assessListingRisk(userId!, ticketsForAssessment);
+    const requiresReview = riskFlags.length > 0; // If any risk flags, needs review
+    const initialStatus = requiresReview ? 'Pending' : 'Active';
+
     // 建立上架記錄
     const listingResult = await client.query(
       `INSERT INTO listing (seller_id, expires_at, status)
-       VALUES ($1, $2, 'Active')
-       RETURNING listing_id, created_at`,
-      [userId, expiresAt]
+       VALUES ($1, $2, $3)
+       RETURNING listing_id, created_at, status`,
+      [userId, expiresAt, initialStatus]
     );
 
     const listingId = listingResult.rows[0].listing_id;
+
+    // Save risk flags if any
+    if (riskFlags.length > 0) {
+      await saveRiskFlags(listingId, riskFlags);
+    }
 
     // 建立上架項目
     for (let i = 0; i < ticketIds.length; i++) {
       await client.query(
         `INSERT INTO listing_item (listing_id, ticket_id, price, status)
-         VALUES ($1, $2, $3, 'Active')`,
-        [listingId, ticketIds[i], prices[i]]
+         VALUES ($1, $2, $3, $4)`,
+        [listingId, ticketIds[i], prices[i], initialStatus]
       );
     }
 
     await client.query('COMMIT');
 
+    const message = requiresReview 
+      ? '上架已送出，等待審核中' 
+      : '上架成功';
+
     res.status(201).json({
-      message: '上架成功',
+      message,
       listingId,
       createdAt: listingResult.rows[0].created_at,
+      status: listingResult.rows[0].status,
+      requiresReview,
+      riskFlags: requiresReview ? riskFlags : undefined,
     });
   } catch (error) {
     await client.query('ROLLBACK');

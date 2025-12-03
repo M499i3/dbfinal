@@ -108,8 +108,12 @@ async function createAllTables() {
           seller_id BIGINT NOT NULL,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           expires_at TIMESTAMP,
-          status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Sold', 'Expired', 'Cancelled')),
-          FOREIGN KEY (seller_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
+          status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Active', 'Sold', 'Expired', 'Cancelled', 'Rejected')),
+          risk_flags TEXT,
+          reviewed_by BIGINT,
+          reviewed_at TIMESTAMP,
+          FOREIGN KEY (seller_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+          FOREIGN KEY (reviewed_by) REFERENCES "user"(user_id) ON DELETE SET NULL ON UPDATE CASCADE
         );
       `,
     },
