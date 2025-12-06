@@ -18,6 +18,9 @@ interface Listing {
   status: string;
   ticket_count: number;
   total_price: number;
+  sold_count?: number;
+  active_count?: number;
+  pending_count?: number;
   risk_flags?: RiskFlag[];
 }
 
@@ -26,7 +29,7 @@ export default function BusinessListingsPage() {
   const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState(''); // Default to all statuses
+  const [statusFilter, setStatusFilter] = useState('Pending'); // 審核頁面默認只顯示待審核
 
   useEffect(() => {
     if (!user || !user.roles.includes('BusinessOperator')) {
@@ -39,9 +42,9 @@ export default function BusinessListingsPage() {
   const fetchListings = async () => {
     try {
       setLoading(true);
-      const url = statusFilter
-        ? `/api/business/listings?status=${statusFilter}`
-        : '/api/business/listings';
+      // 審核頁面：如果沒有選擇篩選器，默認只顯示待審核
+      const filter = statusFilter || 'Pending';
+      const url = `/api/business/listings?status=${filter}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -204,17 +207,17 @@ export default function BusinessListingsPage() {
           <p className="text-gray-400">審核與管理使用者上架的票券</p>
         </div>
 
-        {/* Pending Count Alert */}
-        {!loading && listings.filter((l) => l.status === 'Pending').length > 0 && (
+        {/* Pending Count Alert - 只在顯示待審核時顯示 */}
+        {!loading && statusFilter === 'Pending' && listings.length > 0 && (
           <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-6 h-6 text-yellow-400" />
               <div>
                 <p className="text-yellow-400 font-medium">
-                  有 {listings.filter((l) => l.status === 'Pending').length} 筆上架等待審核
+                  有 {listings.length} 筆上架等待審核
                 </p>
                 <p className="text-yellow-400/70 text-sm">
-                  請檢查風險標記並決定批准或拒絕上架
+                  請檢查風險標記並決定批准或拒絕上架。待審核的票券不會出現在市場上，必須通過審核後才能上架。
                 </p>
               </div>
             </div>
@@ -237,13 +240,12 @@ export default function BusinessListingsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
             >
-              <option value="">全部狀態</option>
-              <option value="Pending">待審核</option>
+              <option value="Pending">待審核（默認）</option>
               <option value="Active">進行中</option>
+              <option value="Rejected">已拒絕</option>
+              <option value="Cancelled">已取消</option>
               <option value="Sold">已售出</option>
               <option value="Expired">已過期</option>
-              <option value="Cancelled">已取消</option>
-              <option value="Rejected">已拒絕</option>
             </select>
           </div>
         </div>
@@ -280,7 +282,17 @@ export default function BusinessListingsPage() {
                       <p>
                         <span className="text-gray-500">票券數量：</span>
                         {listing.ticket_count} 張
+                        {listing.status === 'Pending' && (
+                          <span className="ml-2 text-yellow-400 text-xs">
+                            (待審核中，不可購買)
+                          </span>
+                        )}
                       </p>
+                      {listing.status === 'Pending' && (listing.sold_count || 0) > 0 && (
+                        <p className="text-red-400 text-xs">
+                          ⚠️ 警告：此待審核上架中有 {listing.sold_count} 張票券標記為已售出（資料異常）
+                        </p>
+                      )}
                       <p>
                         <span className="text-gray-500">總價：</span>
                         NT$ {parseFloat(listing.total_price || '0').toLocaleString()}
@@ -326,6 +338,7 @@ export default function BusinessListingsPage() {
                       <span>查看詳情</span>
                     </button>
                     
+                    {/* 只有待審核狀態才顯示批准/拒絕按鈕 */}
                     {listing.status === 'Pending' && (
                       <div className="flex space-x-2">
                         <button
@@ -333,26 +346,23 @@ export default function BusinessListingsPage() {
                           className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm py-2 px-3 flex items-center justify-center space-x-1 hover:bg-green-500/30 transition-colors"
                         >
                           <CheckCircle size={16} />
-                          <span>批准</span>
+                          <span>批准上架</span>
                         </button>
                         <button
                           onClick={() => handleReject(listing.listing_id)}
                           className="flex-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-3 flex items-center justify-center space-x-1 hover:bg-red-500/30 transition-colors"
                         >
                           <XCircle size={16} />
-                          <span>拒絕</span>
+                          <span>拒絕（下架）</span>
                         </button>
                       </div>
                     )}
                     
-                    {listing.status === 'Active' && (
-                      <button
-                        onClick={() => handleTakeDown(listing.listing_id)}
-                        className="bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-4 flex items-center justify-center space-x-1 hover:bg-red-500/30 transition-colors"
-                      >
-                        <X size={16} />
-                        <span>下架</span>
-                      </button>
+                    {/* 其他狀態不顯示操作按鈕（審核頁面主要處理待審核） */}
+                    {listing.status !== 'Pending' && (
+                      <div className="text-xs text-gray-500 text-center">
+                        此上架已{listing.status === 'Active' ? '通過審核' : listing.status === 'Rejected' ? '被拒絕' : '處理完成'}
+                      </div>
                     )}
                   </div>
                 </div>

@@ -14,7 +14,10 @@ export const getAllListings = async (req: AuthRequest, res: Response): Promise<v
       SELECT l.listing_id, l.seller_id, l.created_at, l.expires_at, l.status,
              u.name as seller_name, u.email as seller_email,
              COUNT(li.ticket_id) as ticket_count,
-             SUM(li.price) as total_price
+             SUM(li.price) as total_price,
+             COUNT(CASE WHEN li.status = 'Sold' THEN 1 END) as sold_count,
+             COUNT(CASE WHEN li.status = 'Active' THEN 1 END) as active_count,
+             COUNT(CASE WHEN li.status = 'Pending' THEN 1 END) as pending_count
       FROM listing l
       JOIN "user" u ON l.seller_id = u.user_id
       LEFT JOIN listing_item li ON l.listing_id = li.listing_id
@@ -163,7 +166,7 @@ export const takeDownListing = async (req: AuthRequest, res: Response): Promise<
 // 獲取所有使用者
 export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { search, kycLevel } = req.query;
+    const { search, kycLevel, blacklisted } = req.query;
 
     let query = `
       SELECT u.*, 
@@ -188,6 +191,14 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
       query += ` AND u.kyc_level = $${paramIndex}`;
       params.push(kycLevel);
       paramIndex++;
+    }
+
+    if (blacklisted !== undefined) {
+      if (blacklisted === 'true' || blacklisted === '1') {
+        query += ` AND EXISTS (SELECT 1 FROM blacklist WHERE user_id = u.user_id)`;
+      } else if (blacklisted === 'false' || blacklisted === '0') {
+        query += ` AND NOT EXISTS (SELECT 1 FROM blacklist WHERE user_id = u.user_id)`;
+      }
     }
 
     query += ` GROUP BY u.user_id ORDER BY u.created_at DESC`;

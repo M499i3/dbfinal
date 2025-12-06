@@ -55,6 +55,12 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
     const riskFlags = await assessListingRisk(userId!, ticketsForAssessment);
     const requiresReview = riskFlags.length > 0; // If any risk flags, needs review
     const initialStatus = requiresReview ? 'Pending' : 'Active';
+    
+    // Debug logging
+    console.log(`[Listing Creation] User ${userId}, Risk flags: ${riskFlags.length}, Status: ${initialStatus}`);
+    if (riskFlags.length > 0) {
+      console.log(`[Listing Creation] Risk flags:`, riskFlags.map(f => f.type));
+    }
 
     // 建立上架記錄
     const listingResult = await client.query(
@@ -66,9 +72,15 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
 
     const listingId = listingResult.rows[0].listing_id;
 
-    // Save risk flags if any
+    // Save risk flags if any (within the same transaction)
     if (riskFlags.length > 0) {
-      await saveRiskFlags(listingId, riskFlags);
+      for (const flag of riskFlags) {
+        await client.query(
+          `INSERT INTO listing_risk_flag (listing_id, flag_type, flag_reason)
+           VALUES ($1, $2, $3)`,
+          [listingId, flag.type, flag.reason]
+        );
+      }
     }
 
     // 建立上架項目

@@ -15,17 +15,18 @@ export async function assessListingRisk(
     // 1. Check if seller is blacklisted
     const blacklistCheck = await pool.query(
       'SELECT user_id FROM blacklist WHERE user_id = $1',
-      [sellerId]
-    );
-    
+    [sellerId]
+  );
+
     if (blacklistCheck.rows.length > 0) {
       flags.push({
         type: 'BlacklistedSeller',
         reason: '賣家在黑名單中',
-      });
-    }
+    });
+  }
 
     // 2. Check if seller is new (first listing or KYC level < 2)
+    // Note: This counts EXISTING listings, not the one being created
     const sellerCheck = await pool.query(
       `SELECT 
         u.kyc_level,
@@ -34,12 +35,13 @@ export async function assessListingRisk(
       LEFT JOIN listing l ON u.user_id = l.seller_id
       WHERE u.user_id = $1
       GROUP BY u.user_id, u.kyc_level`,
-      [sellerId]
-    );
+    [sellerId]
+  );
 
     if (sellerCheck.rows.length > 0) {
       const seller = sellerCheck.rows[0];
-      if (seller.listing_count === 0 || seller.kyc_level < 2) {
+      // Flag as NewSeller if: no previous listings OR KYC level < 2
+      if (parseInt(seller.listing_count) === 0 || parseInt(seller.kyc_level) < 2) {
         flags.push({
           type: 'NewSeller',
           reason: `新賣家 (KYC等級: ${seller.kyc_level}, 歷史上架數: ${seller.listing_count})`,
@@ -48,33 +50,33 @@ export async function assessListingRisk(
     }
 
     // 3. Check ticket quantity
-    if (tickets.length > 5) {
+  if (tickets.length > 5) {
       flags.push({
         type: 'HighQuantity',
         reason: `一次上架 ${tickets.length} 張票券（超過5張）`,
-      });
-    }
+    });
+  }
 
     // 4. Check prices for each ticket
-    for (const ticket of tickets) {
-      const priceRatio = ticket.price / ticket.faceValue;
-      
+  for (const ticket of tickets) {
+    const priceRatio = ticket.price / ticket.faceValue;
+
       // High price: > 120% of face value
-      if (priceRatio > 1.2) {
+    if (priceRatio > 1.2) {
         flags.push({
           type: 'HighPrice',
           reason: `票券 #${ticket.ticketId}: 售價 $${ticket.price} 高於面額 $${ticket.faceValue} 的 120% (${(priceRatio * 100).toFixed(0)}%)`,
-        });
-      }
-      
+      });
+    }
+
       // Low price: < 50% of face value
-      if (priceRatio < 0.5) {
+    if (priceRatio < 0.5) {
         flags.push({
           type: 'LowPrice',
           reason: `票券 #${ticket.ticketId}: 售價 $${ticket.price} 低於面額 $${ticket.faceValue} 的 50% (${(priceRatio * 100).toFixed(0)}%)`,
-        });
-      }
+      });
     }
+  }
 
     return flags;
   } catch (error) {
@@ -111,5 +113,5 @@ export async function getRiskFlags(listingId: number): Promise<RiskFlag[]> {
   } catch (error) {
     console.error('獲取風險標記錯誤:', error);
     return [];
-  }
+}
 }

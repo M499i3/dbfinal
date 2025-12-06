@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS listing_item (
     listing_id BIGINT NOT NULL,
     ticket_id BIGINT NOT NULL,
     price DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Sold', 'Expired', 'Cancelled')),
+    status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Pending', 'Active', 'Sold', 'Expired', 'Cancelled')),
     PRIMARY KEY (listing_id, ticket_id),
     FOREIGN KEY (listing_id) REFERENCES listing(listing_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (ticket_id) REFERENCES ticket(ticket_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -214,6 +214,22 @@ CREATE TABLE IF NOT EXISTS risk_event (
     FOREIGN KEY (user_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- 表 17: LISTING_RISK_FLAG - 上架風險標記資料表
+CREATE TABLE IF NOT EXISTS listing_risk_flag (
+    flag_id BIGSERIAL PRIMARY KEY,
+    listing_id BIGINT NOT NULL,
+    flag_type VARCHAR(50) NOT NULL CHECK (flag_type IN (
+        'HighPrice',
+        'LowPrice', 
+        'NewSeller',
+        'HighQuantity',
+        'BlacklistedSeller'
+    )),
+    flag_reason TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (listing_id) REFERENCES listing(listing_id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- =====================================================
 -- 建立索引以優化查詢效能
 -- =====================================================
@@ -249,4 +265,5 @@ CREATE INDEX idx_review_order ON review(order_id);
 -- 風險相關索引
 CREATE INDEX idx_risk_user ON risk_event(user_id);
 CREATE INDEX idx_risk_type ON risk_event(type);
+CREATE INDEX idx_listing_risk_flag_listing ON listing_risk_flag(listing_id);
 

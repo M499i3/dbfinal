@@ -14,7 +14,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
     // 驗證所有項目是否可購買
     for (const item of items) {
       const availableCheck = await client.query(
-        `SELECT li.listing_id, li.ticket_id, li.price, l.seller_id
+        `SELECT li.listing_id, li.ticket_id, li.price, l.seller_id, l.status as listing_status
          FROM listing_item li
          JOIN listing l ON li.listing_id = l.listing_id
          WHERE li.listing_id = $1 AND li.ticket_id = $2 
@@ -25,6 +25,13 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
       if (availableCheck.rows.length === 0) {
         res.status(400).json({ error: `票券 ${item.ticketId} 已售出或不可購買` });
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      // 額外檢查：確保上架不是待審核狀態（雙重保護）
+      if (availableCheck.rows[0].listing_status === 'Pending') {
+        res.status(400).json({ error: `票券 ${item.ticketId} 正在等待審核，無法購買` });
         await client.query('ROLLBACK');
         return;
       }

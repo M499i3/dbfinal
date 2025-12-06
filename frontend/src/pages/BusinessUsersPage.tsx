@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Shield, AlertTriangle, Search } from 'lucide-react';
+import { Users, Shield, AlertTriangle, Search, Filter, Ban, CheckCircle } from 'lucide-react';
 
 interface User {
   userId: number;
@@ -19,15 +19,21 @@ export default function BusinessUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [blacklistFilter, setBlacklistFilter] = useState<string>('');
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [blacklistFilter]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/business/users', {
+      const params = new URLSearchParams();
+      if (blacklistFilter) {
+        params.append('blacklisted', blacklistFilter);
+      }
+      const url = `/api/business/users${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -55,13 +61,70 @@ export default function BusinessUsersPage() {
     );
   };
 
+  const handleAddToBlacklist = async (userId: number, userName: string) => {
+    const reason = prompt(`請輸入將 ${userName} 加入黑名單的原因：`);
+    if (!reason || reason.trim() === '') {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/business/users/${userId}/blacklist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (response.ok) {
+        alert('使用者已加入黑名單');
+        fetchUsers();
+      } else {
+        const error = await response.json();
+        alert(error.error || '加入黑名單失敗');
+      }
+    } catch (error) {
+      console.error('Error adding to blacklist:', error);
+      alert('加入黑名單失敗');
+    }
+  };
+
+  const handleRemoveFromBlacklist = async (userId: number, userName: string) => {
+    if (!confirm(`確定要將 ${userName} 從黑名單移除嗎？`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/business/users/${userId}/blacklist`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        alert('使用者已從黑名單移除');
+        fetchUsers();
+      } else {
+        const error = await response.json();
+        alert(error.error || '移除黑名單失敗');
+      }
+    } catch (error) {
+      console.error('Error removing from blacklist:', error);
+      alert('移除黑名單失敗');
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = 
       user.name.toLowerCase().includes(searchLower) ||
       user.email.toLowerCase().includes(searchLower) ||
-      user.phone.includes(searchTerm)
-    );
+      user.phone.includes(searchTerm);
+    
+    // Blacklist filter is already applied on the backend, but we keep search filter here
+    return matchesSearch;
   });
 
   return (
@@ -70,10 +133,23 @@ export default function BusinessUsersPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-display font-bold text-white mb-2">用戶管理</h1>
           <p className="text-gray-400">查詢使用者與風險管理</p>
+          {!loading && (
+            <div className="mt-4 flex items-center gap-4 text-sm">
+              <span className="text-gray-400">
+                總使用者數: <span className="text-white font-medium">{users.length}</span>
+              </span>
+              <span className="text-gray-400">
+                已停權: <span className="text-red-400 font-medium">{users.filter(u => u.isBlacklisted).length}</span>
+              </span>
+              <span className="text-gray-400">
+                正常: <span className="text-green-400 font-medium">{users.filter(u => !u.isBlacklisted).length}</span>
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="mb-6">
-          <div className="relative">
+        <div className="mb-6 flex items-center space-x-4">
+          <div className="relative flex-1">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
             <input
               type="text"
@@ -82,6 +158,18 @@ export default function BusinessUsersPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field pr-12"
             />
+          </div>
+          <div className="relative">
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
+            <select
+              value={blacklistFilter}
+              onChange={(e) => setBlacklistFilter(e.target.value)}
+              className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
+            >
+              <option value="">全部狀態</option>
+              <option value="true">已停權（黑名單）</option>
+              <option value="false">正常使用者</option>
+            </select>
           </div>
         </div>
 
@@ -100,6 +188,7 @@ export default function BusinessUsersPage() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">角色</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">風險事件</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">狀態</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
@@ -134,13 +223,33 @@ export default function BusinessUsersPage() {
                       </td>
                       <td className="px-6 py-4">
                         {user.isBlacklisted ? (
-                          <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-medium">
-                            已停權
+                          <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1">
+                            <Shield size={14} />
+                            已停權（黑名單）
                           </span>
                         ) : (
                           <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-xs font-medium">
                             正常
                           </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.isBlacklisted ? (
+                          <button
+                            onClick={() => handleRemoveFromBlacklist(user.userId, user.name)}
+                            className="px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-medium hover:bg-green-500/30 transition-colors flex items-center gap-1"
+                          >
+                            <CheckCircle size={14} />
+                            移除黑名單
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAddToBlacklist(user.userId, user.name)}
+                            className="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium hover:bg-red-500/30 transition-colors flex items-center gap-1"
+                          >
+                            <Ban size={14} />
+                            加入黑名單
+                          </button>
                         )}
                       </td>
                     </tr>
