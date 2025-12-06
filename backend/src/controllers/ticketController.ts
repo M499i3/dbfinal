@@ -18,7 +18,9 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
       JOIN event e ON t.event_id = e.event_id
       JOIN seat_zone sz ON t.zone_id = sz.zone_id
       JOIN listing_item li ON t.ticket_id = li.ticket_id AND li.status = 'Active'
-      JOIN listing l ON li.listing_id = l.listing_id AND l.status = 'Active'
+      JOIN listing l ON li.listing_id = l.listing_id 
+        AND l.status = 'Active' 
+        AND l.approval_status = 'Approved'
       JOIN "user" u ON l.seller_id = u.user_id
       LEFT JOIN review r ON r.reviewee_id = l.seller_id
       WHERE e.status = 'Scheduled' 

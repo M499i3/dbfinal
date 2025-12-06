@@ -4,13 +4,13 @@ import { AuthRequest } from '../middleware/auth.js';
 
 // ==================== 票券與刊登管理 ====================
 
-// 獲取所有上架（供審核）
+// 獲取所有上架（供審核和管理）
 export const getAllListings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { status, sellerId } = req.query;
+    const { status, sellerId, approvalStatus } = req.query;
 
     let query = `
-      SELECT l.listing_id, l.seller_id, l.created_at, l.expires_at, l.status,
+      SELECT l.listing_id, l.seller_id, l.created_at, l.expires_at, l.status, l.approval_status,
              u.name as seller_name, u.email as seller_email,
              COUNT(li.ticket_id) as ticket_count,
              SUM(li.price) as total_price
@@ -32,6 +32,12 @@ export const getAllListings = async (req: AuthRequest, res: Response): Promise<v
     if (sellerId) {
       query += ` AND l.seller_id = $${paramIndex}`;
       params.push(sellerId);
+      paramIndex++;
+    }
+
+    if (approvalStatus) {
+      query += ` AND l.approval_status = $${paramIndex}`;
+      params.push(approvalStatus);
       paramIndex++;
     }
 
@@ -86,7 +92,35 @@ export const getListingDetails = async (req: AuthRequest, res: Response): Promis
   }
 };
 
-// 下架違規票券
+// 審核上架（通過或拒絕）
+export const approveListing = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { action } = req.body; // 'approve' 或 'reject'
+
+  try {
+    if (action !== 'approve' && action !== 'reject') {
+      res.status(400).json({ error: '無效的操作，必須是 approve 或 reject' });
+      return;
+    }
+
+    const approvalStatus = action === 'approve' ? 'Approved' : 'Rejected';
+
+    await pool.query(
+      `UPDATE listing SET approval_status = $1 WHERE listing_id = $2`,
+      [approvalStatus, id]
+    );
+
+    res.json({ 
+      message: action === 'approve' ? '上架已審核通過' : '上架已拒絕',
+      approvalStatus 
+    });
+  } catch (error) {
+    console.error('審核上架錯誤:', error);
+    res.status(500).json({ error: '伺服器錯誤' });
+  }
+};
+
+// 下架違規票券（移到管理票券功能中）
 export const takeDownListing = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { reason } = req.body;

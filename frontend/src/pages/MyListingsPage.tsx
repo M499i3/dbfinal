@@ -64,9 +64,10 @@ export default function MyListingsPage() {
   const fetchEvents = async () => {
     try {
       const data = await getEvents({ status: 'Scheduled' });
-      setEvents(data.events);
+      setEvents(data.events || []);
     } catch (error) {
       console.error('Error fetching events:', error);
+      alert('獲取活動列表失敗，請稍後再試');
     }
   };
 
@@ -93,7 +94,26 @@ export default function MyListingsPage() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, approvalStatus?: string) => {
+    // 如果审核状态是 Pending，显示"审核中"
+    if (approvalStatus === 'Pending') {
+      return (
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
+          審核中
+        </span>
+      );
+    }
+    
+    // 如果审核状态是 Rejected，显示"已拒絕"
+    if (approvalStatus === 'Rejected') {
+      return (
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">
+          已拒絕
+        </span>
+      );
+    }
+    
+    // 审核通过后，根据 status 显示
     const styles: Record<string, string> = {
       Active: 'bg-green-500/20 text-green-400',
       Sold: 'bg-blue-500/20 text-blue-400',
@@ -107,8 +127,8 @@ export default function MyListingsPage() {
       Cancelled: '已取消',
     };
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-        {labels[status]}
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status] || ''}`}>
+        {labels[status] || status}
       </span>
     );
   };
@@ -237,7 +257,7 @@ export default function MyListingsPage() {
               >
                 <div className="p-6 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center space-x-4">
-                    {getStatusBadge(listing.status)}
+                    {getStatusBadge(listing.status, listing.approvalStatus)}
                     <span className="text-gray-400 text-sm">
                       上架編號 #{listing.listingId}
                     </span>
@@ -287,7 +307,7 @@ export default function MyListingsPage() {
                     ))}
                   </div>
 
-                  {listing.status === 'Active' && (
+                  {listing.status === 'Active' && listing.approvalStatus === 'Approved' && (
                     <div className="mt-6 pt-6 border-t border-gray-800 flex justify-end">
                       <button
                         onClick={() => handleCancel(listing.listingId)}
@@ -334,14 +354,20 @@ export default function MyListingsPage() {
                   onChange={(e) => setFormData({ ...formData, eventId: e.target.value, zoneId: '' })}
                   className="input-field"
                   required
+                  disabled={events.length === 0}
                 >
-                  <option value="">選擇活動</option>
+                  <option value="">{events.length === 0 ? '載入中或暫無可用活動...' : '選擇活動'}</option>
                   {events.map((event) => (
                     <option key={event.eventId} value={event.eventId}>
                       {event.title} - {event.artist} ({new Date(event.eventDate).toLocaleDateString('zh-TW')})
                     </option>
                   ))}
                 </select>
+                {events.length === 0 && (
+                  <p className="text-yellow-400 text-sm mt-2">
+                    提示：如果沒有顯示活動，可能是因為所有活動都已結束，或資料庫中沒有活動資料。
+                  </p>
+                )}
               </div>
 
               {/* Zone Selection */}

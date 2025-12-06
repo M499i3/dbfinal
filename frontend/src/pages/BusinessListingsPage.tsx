@@ -11,6 +11,7 @@ interface Listing {
   created_at: string;
   expires_at: string;
   status: string;
+  approval_status: string;
   ticket_count: number;
   total_price: number;
 }
@@ -21,6 +22,7 @@ export default function BusinessListingsPage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState('');
 
   useEffect(() => {
     if (!user || !user.roles.includes('BusinessOperator')) {
@@ -28,14 +30,15 @@ export default function BusinessListingsPage() {
       return;
     }
     fetchListings();
-  }, [user, navigate, statusFilter]);
+  }, [user, navigate, statusFilter, approvalFilter]);
 
   const fetchListings = async () => {
     try {
       setLoading(true);
-      const url = statusFilter
-        ? `/api/business/listings?status=${statusFilter}`
-        : '/api/business/listings';
+      const params = new URLSearchParams();
+      if (statusFilter) params.append('status', statusFilter);
+      if (approvalFilter) params.append('approvalStatus', approvalFilter);
+      const url = `/api/business/listings${params.toString() ? '?' + params.toString() : ''}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -50,29 +53,33 @@ export default function BusinessListingsPage() {
     }
   };
 
-  const handleTakeDown = async (listingId: number) => {
-    if (!confirm('確定要下架此上架嗎？')) return;
+  const handleApprove = async (listingId: number, action: 'approve' | 'reject') => {
+    const confirmMsg = action === 'approve' 
+      ? '確定要審核通過此上架嗎？通過後其他用戶將可以瀏覽和購買。'
+      : '確定要拒絕此上架嗎？';
+    
+    if (!confirm(confirmMsg)) return;
 
     try {
-      const response = await fetch(`/api/business/listings/${listingId}/take-down`, {
+      const response = await fetch(`/api/business/listings/${listingId}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ reason: '管理員下架' }),
+        body: JSON.stringify({ action }),
       });
 
       if (response.ok) {
-        alert('上架已下架');
+        alert(action === 'approve' ? '上架已審核通過' : '上架已拒絕');
         fetchListings();
       } else {
         const error = await response.json();
-        alert(error.error || '下架失敗');
+        alert(error.error || '操作失敗');
       }
     } catch (error) {
-      console.error('Error taking down listing:', error);
-      alert('下架失敗');
+      console.error('Error approving listing:', error);
+      alert('操作失敗');
     }
   };
 
@@ -92,6 +99,24 @@ export default function BusinessListingsPage() {
     return (
       <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status] || ''}`}>
         {labels[status] || status}
+      </span>
+    );
+  };
+
+  const getApprovalBadge = (approvalStatus: string) => {
+    const styles: Record<string, string> = {
+      Pending: 'bg-yellow-500/20 text-yellow-400',
+      Approved: 'bg-green-500/20 text-green-400',
+      Rejected: 'bg-red-500/20 text-red-400',
+    };
+    const labels: Record<string, string> = {
+      Pending: '待審核',
+      Approved: '已通過',
+      Rejected: '已拒絕',
+    };
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[approvalStatus] || ''}`}>
+        {labels[approvalStatus] || approvalStatus}
       </span>
     );
   };
@@ -130,6 +155,16 @@ export default function BusinessListingsPage() {
               <option value="Expired">已過期</option>
               <option value="Cancelled">已取消</option>
             </select>
+            <select
+              value={approvalFilter}
+              onChange={(e) => setApprovalFilter(e.target.value)}
+              className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
+            >
+              <option value="">全部審核狀態</option>
+              <option value="Pending">待審核</option>
+              <option value="Approved">已通過</option>
+              <option value="Rejected">已拒絕</option>
+            </select>
           </div>
         </div>
 
@@ -156,6 +191,7 @@ export default function BusinessListingsPage() {
                         上架 #{listing.listing_id}
                       </h3>
                       {getStatusBadge(listing.status)}
+                      {getApprovalBadge(listing.approval_status)}
                     </div>
                     <div className="space-y-2 text-sm text-gray-400">
                       <p>
@@ -190,14 +226,22 @@ export default function BusinessListingsPage() {
                       <Eye size={16} />
                       <span>查看詳情</span>
                     </button>
-                    {listing.status === 'Active' && (
-                      <button
-                        onClick={() => handleTakeDown(listing.listing_id)}
-                        className="bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-red-500/30 transition-colors"
-                      >
-                        <X size={16} />
-                        <span>下架</span>
-                      </button>
+                    {listing.approval_status === 'Pending' && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(listing.listing_id, 'approve')}
+                          className="bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-green-500/30 transition-colors"
+                        >
+                          <span>✓ 通過</span>
+                        </button>
+                        <button
+                          onClick={() => handleApprove(listing.listing_id, 'reject')}
+                          className="bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-red-500/30 transition-colors"
+                        >
+                          <X size={16} />
+                          <span>拒絕</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

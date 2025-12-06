@@ -41,6 +41,7 @@ export const getSellerProfile = async (req: Request, res: Response): Promise<voi
        JOIN seat_zone sz ON t.zone_id = sz.zone_id
        WHERE l.seller_id = $1
        AND l.status = 'Active'
+       AND l.approval_status = 'Approved'
        AND li.status = 'Active'
        AND e.status = 'Scheduled'
        AND (e.event_date + e.start_time) > CURRENT_TIMESTAMP

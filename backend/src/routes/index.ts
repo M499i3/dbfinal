@@ -27,6 +27,7 @@ import {
 import {
   getAllListings,
   getListingDetails,
+  approveListing,
   takeDownListing,
   getAllUsers,
   getUserDetails,
@@ -105,6 +106,7 @@ router.get('/business/stats', authenticate, requireBusinessOperator, getBusiness
 // 票券與刊登管理
 router.get('/business/listings', authenticate, requireBusinessOperator, getAllListings);
 router.get('/business/listings/:id', authenticate, requireBusinessOperator, getListingDetails);
+router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
 router.post('/business/listings/:id/take-down', authenticate, requireBusinessOperator, takeDownListing);
 
 // 用戶與風險管理

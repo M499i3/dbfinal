@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getMyOrders, payOrder, cancelOrder, createReview, createCase, Order } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +15,8 @@ export default function MyOrdersPage() {
   const [reviewComment, setReviewComment] = useState<string>('');
   const [casingOrderId, setCasingOrderId] = useState<number | null>(null);
   const [caseType, setCaseType] = useState<'Fraud' | 'Delivery' | 'Refund' | 'Other'>('Other');
+  const [timeRemaining, setTimeRemaining] = useState<Record<number, number>>({});
+  const lastRefreshTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!user) {
@@ -24,11 +26,101 @@ export default function MyOrdersPage() {
     fetchOrders();
   }, [user, navigate]);
 
+  // 計算剩餘時間並更新倒計時
+  useEffect(() => {
+    if (orders.length === 0) {
+      setTimeRemaining({});
+      return;
+    }
+
+    const calculateTimeRemaining = () => {
+      // 使用 UTC 时间戳，避免时区问题
+      const now = Date.now(); // 这已经是 UTC 时间戳（毫秒）
+      const newTimeRemaining: Record<number, number> = {};
+
+      orders.forEach((order) => {
+        if (order.status === 'Pending') {
+          // 确保 createdAt 是有效的日期字符串
+          // PostgreSQL 返回的时间是 UTC 时间（ISO 8601 格式，以 Z 结尾）
+          let createdAtTime: number;
+          try {
+            // 确保 createdAt 是字符串格式
+            const createdAtStr = typeof order.createdAt === 'string' 
+              ? order.createdAt 
+              : order.createdAt?.toString() || '';
+            
+            // 直接解析为 Date 对象，JavaScript 会自动处理 UTC 时间
+            const createdAt = new Date(createdAtStr);
+            if (isNaN(createdAt.getTime())) {
+              // 如果日期無效，跳過
+              return;
+            }
+            
+            // 使用 getTime() 获取 UTC 时间戳（毫秒）
+            createdAtTime = createdAt.getTime();
+          } catch (error) {
+            return;
+          }
+
+          const fiveMinutes = 5 * 60 * 1000; // 5 分鐘（毫秒）
+          const elapsed = now - createdAtTime;
+          
+          // 如果 elapsed 是负数或异常大（超过 1 小时），可能是时区问题
+          // 这种情况下，我们假设订单刚创建，剩余时间为 5 分钟
+          if (elapsed < 0 || elapsed > 60 * 60 * 1000) {
+            // 假设订单刚创建，剩余时间为 5 分钟
+            newTimeRemaining[order.orderId] = fiveMinutes;
+          } else {
+            const remaining = Math.max(0, fiveMinutes - elapsed);
+            newTimeRemaining[order.orderId] = remaining;
+          }
+        }
+      });
+
+      setTimeRemaining(newTimeRemaining);
+    };
+
+    calculateTimeRemaining();
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      calculateTimeRemaining();
+      
+      // 檢查是否有訂單超時，如果有則刷新訂單列表（但避免頻繁刷新）
+      const hasExpired = orders.some((order) => {
+        if (order.status === 'Pending') {
+          const createdAt = new Date(order.createdAt);
+          if (isNaN(createdAt.getTime())) {
+            return false;
+          }
+          const createdAtTime = createdAt.getTime();
+          const fiveMinutes = 5 * 60 * 1000;
+          // 檢查是否剛好超過 5 分鐘（允許 10 秒的緩衝時間）
+          return now - createdAtTime >= fiveMinutes && now - createdAtTime < fiveMinutes + 10000;
+        }
+        return false;
+      });
+      
+      // 只有在有超時訂單且距離上次刷新超過 10 秒時才刷新
+      if (hasExpired && now - lastRefreshTimeRef.current > 10000) {
+        lastRefreshTimeRef.current = now;
+        // 使用 setTimeout 延遲刷新，避免在 useEffect 中直接調用
+        setTimeout(() => {
+          fetchOrders();
+        }, 100);
+      }
+    }, 1000); // 每秒更新一次
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
       const data = await getMyOrders();
       setOrders(data.orders);
+      // 重置倒计时状态
+      setTimeRemaining({});
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -66,6 +158,7 @@ export default function MyOrdersPage() {
       </span>
     );
   };
+
 
   const handlePay = async (orderId: number) => {
     try {
@@ -274,29 +367,29 @@ export default function MyOrdersPage() {
                   {/* Actions */}
                   {order.status === 'Pending' && (
                     <div className="flex justify-end space-x-4">
-                      <button
-                        onClick={() => handleCancel(order.orderId)}
-                        disabled={processingId === order.orderId}
-                        className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-50"
-                      >
-                        <X size={18} />
-                        <span>取消訂單</span>
-                      </button>
-                      <button
-                        onClick={() => handlePay(order.orderId)}
-                        disabled={processingId === order.orderId}
-                        className="btn-primary flex items-center space-x-2 disabled:opacity-50"
-                      >
-                        {processingId === order.orderId ? (
-                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                        ) : (
-                          <>
-                            <CreditCard size={18} />
-                            <span>立即付款</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                        <button
+                          onClick={() => handleCancel(order.orderId)}
+                          disabled={processingId === order.orderId}
+                          className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-50"
+                        >
+                          <X size={18} />
+                          <span>取消訂單</span>
+                        </button>
+                        <button
+                          onClick={() => handlePay(order.orderId)}
+                          disabled={processingId === order.orderId}
+                          className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+                        >
+                          {processingId === order.orderId ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                          ) : (
+                            <>
+                              <CreditCard size={18} />
+                              <span>立即付款</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                   )}
 
                   {order.status === 'Completed' && (

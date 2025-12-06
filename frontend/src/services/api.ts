@@ -197,6 +197,7 @@ export interface Listing {
   createdAt: string;
   expiresAt: string;
   status: string;
+  approvalStatus?: string;
   items: {
     ticketId: number;
     seatLabel: string;

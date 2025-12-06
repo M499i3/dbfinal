@@ -99,8 +99,13 @@ CREATE TABLE IF NOT EXISTS listing (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP,
     status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Sold', 'Expired', 'Cancelled')),
+    approval_status VARCHAR(20) DEFAULT 'Pending' CHECK (approval_status IN ('Pending', 'Approved', 'Rejected')),
     FOREIGN KEY (seller_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- 索引
+CREATE INDEX IF NOT EXISTS idx_listing_approval_status ON listing(approval_status);
+CREATE INDEX IF NOT EXISTS idx_listing_status_approval ON listing(status, approval_status);
 
 -- 表 8: LISTING_ITEM - 上架項目資料表（票券與上架的關聯）
 CREATE TABLE IF NOT EXISTS listing_item (

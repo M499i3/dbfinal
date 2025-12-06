@@ -1,5 +1,84 @@
 # 更新記錄
 
+## 2025-12-06 - 訂單超時機制與票券審核系統
+
+### ⏰ 訂單超時自動取消功能
+
+#### 功能實現
+- ✅ 訂單創建後 5 分鐘內未付款將自動取消
+- ✅ 後端定時任務每 1 分鐘檢查一次超時訂單
+- ✅ 超時訂單自動釋放票券，狀態改回 Active
+- ✅ 前端顯示訂單狀態和倒計時（已移除顯示，保留後台功能）
+
+#### 技術實現
+- 新增 `backend/src/services/orderTimeoutService.ts` 定時服務
+- 在 `app.ts` 中啟動定時任務
+- 使用資料庫事務確保資料一致性
+
+### 🔍 票券上架審核系統
+
+#### 資料庫 Schema 更新
+- ✅ 在 `listing` 表中添加 `approval_status` 欄位（Pending, Approved, Rejected）
+- ✅ 新增 Migration 文件：`002_add_listing_approval_status.sql`
+- ✅ 建立索引優化查詢性能
+
+#### 審核流程
+- ✅ 用戶上架票券後，狀態為 `Pending`（待審核）
+- ✅ Admin 在「審核上架」頁面可以審核通過或拒絕
+- ✅ 只有審核通過的票券才能被其他用戶瀏覽和購買
+- ✅ 用戶端顯示：審核中 → 上架中（審核通過後）
+
+#### 功能分離
+- ✅ 「審核上架」頁面：處理待審核的上架（通過/拒絕）
+- ✅ 「管理票券」頁面：管理已審核通過的上架（下架功能）
+
+### 🐛 Bug 修復
+
+#### 訂單查詢重複問題
+- ✅ 修復 `getMyOrders` 查詢導致訂單重複顯示的問題
+- ✅ 優化 SQL 查詢，使用子查詢獲取 payment 資訊
+
+#### 時區問題修復
+- ✅ 修復訂單創建時間顯示問題
+- ✅ 確保後端返回 UTC 時間的 ISO 8601 格式字符串
+- ✅ 前端正確解析 UTC 時間
+
+#### 活動選擇問題
+- ✅ 修復上架票券時無法選擇活動的問題
+- ✅ 優化活動查詢邏輯，確保返回所有未結束的活動
+
+### 📝 狀態顯示優化
+
+#### 用戶上架狀態
+- ✅ 審核中：`approval_status = 'Pending'` → 顯示「審核中」（黃色）
+- ✅ 上架中：`approval_status = 'Approved'` 且 `status = 'Active'` → 顯示「上架中」（綠色）
+- ✅ 已拒絕：`approval_status = 'Rejected'` → 顯示「已拒絕」（紅色）
+
+### 🗂️ 檔案整理
+
+#### 新增的檔案
+- ✅ `backend/src/services/orderTimeoutService.ts` - 訂單超時服務
+- ✅ `database/migrations/002_add_listing_approval_status.sql` - 審核功能 Migration
+
+#### 修改的檔案
+- ✅ `backend/src/controllers/orderController.ts` - 訂單查詢優化、時間格式處理、超時檢查
+- ✅ `backend/src/controllers/listingController.ts` - 新上架默認為待審核、返回審核狀態
+- ✅ `backend/src/controllers/ticketController.ts` - 只顯示已審核通過的票券
+- ✅ `backend/src/controllers/eventController.ts` - 活動查詢優化、審核狀態過濾
+- ✅ `backend/src/controllers/businessManagementController.ts` - 新增審核功能（approve/reject）
+- ✅ `backend/src/controllers/userController.ts` - 賣家頁面只顯示已審核通過的票券
+- ✅ `backend/src/routes/index.ts` - 新增審核路由
+- ✅ `backend/src/app.ts` - 啟動訂單超時服務
+- ✅ `backend/src/scripts/createAllTables.ts` - 更新 listing 表定義
+- ✅ `database/schema.sql` - 添加 approval_status 欄位
+- ✅ `frontend/src/pages/MyOrdersPage.tsx` - 移除倒計時顯示、清理調試代碼
+- ✅ `frontend/src/pages/MyListingsPage.tsx` - 狀態顯示優化、審核狀態顯示
+- ✅ `frontend/src/pages/BusinessListingsPage.tsx` - 審核功能 UI、審核狀態篩選
+- ✅ `frontend/src/pages/BusinessTicketsPage.tsx` - 下架功能 UI、只顯示已審核通過
+- ✅ `frontend/src/services/api.ts` - 更新 Listing 接口、添加審核狀態
+
+---
+
 ## 2025-01-XX - 資料庫 Schema 修正與功能新增
 
 ### 📊 資料庫 Schema 修正
@@ -99,4 +178,6 @@
 
 > **日期**: 2025-01-XX  
 > **主要修改者**: [您的名字]
+
+
 

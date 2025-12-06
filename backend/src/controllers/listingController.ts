@@ -40,11 +40,14 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 檢查票券是否已經上架
+    // 檢查票券是否已經上架（包括待審核和已審核通過的）
     const activeListingCheck = await client.query(
       `SELECT li.ticket_id FROM listing_item li
        JOIN listing l ON li.listing_id = l.listing_id
-       WHERE li.ticket_id = ANY($1) AND li.status = 'Active' AND l.status = 'Active'`,
+       WHERE li.ticket_id = ANY($1) 
+       AND li.status = 'Active' 
+       AND l.status = 'Active'
+       AND l.approval_status IN ('Pending', 'Approved')`,
       [ticketIds]
     );
 
@@ -54,10 +57,10 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 建立上架記錄
+    // 建立上架記錄（默認為待審核狀態）
     const listingResult = await client.query(
-      `INSERT INTO listing (seller_id, expires_at, status)
-       VALUES ($1, $2, 'Active')
+      `INSERT INTO listing (seller_id, expires_at, status, approval_status)
+       VALUES ($1, $2, 'Active', 'Pending')
        RETURNING listing_id, created_at`,
       [userId, expiresAt]
     );
@@ -94,7 +97,7 @@ export const getMyListings = async (req: AuthRequest, res: Response): Promise<vo
 
   try {
     const result = await pool.query(
-      `SELECT l.listing_id, l.created_at, l.expires_at, l.status,
+      `SELECT l.listing_id, l.created_at, l.expires_at, l.status, l.approval_status,
               json_agg(json_build_object(
                 'ticketId', t.ticket_id,
                 'seatLabel', t.seat_label,
@@ -122,6 +125,7 @@ export const getMyListings = async (req: AuthRequest, res: Response): Promise<vo
         createdAt: listing.created_at,
         expiresAt: listing.expires_at,
         status: listing.status,
+        approvalStatus: listing.approval_status,
         items: listing.items,
       })),
     });
