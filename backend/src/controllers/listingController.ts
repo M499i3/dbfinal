@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { assessListingRisk, saveRiskFlags } from '../utils/riskAssessment.js';
+import { assessListingRisk } from '../utils/riskAssessment.js';
 
 export const createListing = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user?.userId;
@@ -58,17 +58,42 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 建立上架記錄（默認為待審核狀態）
+    // 獲取票券資訊（包括面額）用於風險評估
+    const ticketInfoResult = await client.query(
+      `SELECT ticket_id, face_value FROM ticket WHERE ticket_id = ANY($1)`,
+      [ticketIds]
+    );
+
+    const ticketInfoMap = new Map(
+      ticketInfoResult.rows.map((row: any) => [row.ticket_id, row.face_value])
+    );
+
+    // 準備風險評估資料
+    const ticketsForRiskAssessment = ticketIds.map((ticketId: number, index: number) => ({
+      ticketId,
+      price: parseFloat(prices[index]),
+      faceValue: ticketInfoMap.get(ticketId) || 0,
+    }));
+
+    // 執行風險評估
+    const riskFlags = await assessListingRisk(userId!, ticketsForRiskAssessment);
+
+    // 根據風險標誌決定初始狀態
+    const requiresReview = riskFlags.length > 0;
+    const initialStatus = requiresReview ? 'Pending' : 'Active';
+    const listingStatus = requiresReview ? 'Pending' : 'Active';
+
+    // 建立上架記錄
     const listingResult = await client.query(
       `INSERT INTO listing (seller_id, expires_at, status, approval_status)
-       VALUES ($1, $2, 'Active', 'Pending')
+       VALUES ($1, $2, $3, $4)
        RETURNING listing_id, created_at`,
-      [userId, expiresAt]
+      [userId, expiresAt, listingStatus, requiresReview ? 'Pending' : 'Approved']
     );
 
     const listingId = listingResult.rows[0].listing_id;
 
-    // Save risk flags if any (within the same transaction)
+    // 保存風險標誌（如果有，在事務中）
     if (riskFlags.length > 0) {
       for (const flag of riskFlags) {
         await client.query(

@@ -32,7 +32,6 @@ import {
   getListingDetails,
   approveListing,
   takeDownListing,
-  approveListing,
   rejectListing,
   getAllUsers,
   getUserDetails,
@@ -122,7 +121,6 @@ router.get('/business/listings', authenticate, requireBusinessOperator, getAllLi
 router.get('/business/listings/:id', authenticate, requireBusinessOperator, getListingDetails);
 router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
 router.post('/business/listings/:id/take-down', authenticate, requireBusinessOperator, takeDownListing);
-router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
 router.post('/business/listings/:id/reject', authenticate, requireBusinessOperator, rejectListing);
 
 // 用戶與風險管理

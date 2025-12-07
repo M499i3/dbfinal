@@ -97,6 +97,95 @@ export const createCase = (data: CreateCaseData) =>
     body: JSON.stringify(data),
   });
 
+// Business - Venues
+export const createVenue = (data: { name: string; city: string; address: string }) =>
+  fetchAPI<{ message: string; venue: Venue }>('/business/venues', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getMyVenues = () =>
+  fetchAPI<{ venues: Venue[] }>('/business/venues');
+
+export const getVenueById = (id: number) =>
+  fetchAPI<{ venue: Venue }>(`/business/venues/${id}`);
+
+export const updateVenue = (id: number, data: { name: string; city: string; address: string }) =>
+  fetchAPI<{ message: string; venue: Venue }>(`/business/venues/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+// Business - Events
+export const createEvent = (data: {
+  venueId: number;
+  artist: string;
+  title: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  imageUrl?: string;
+}) =>
+  fetchAPI<{ message: string; eventId: number }>('/business/events', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getMyEvents = () =>
+  fetchAPI<{ events: BusinessEvent[] }>('/business/events');
+
+export const getEventByIdForBusiness = (id: number) =>
+  fetchAPI<BusinessEvent>(`/business/events/${id}`);
+
+export const updateEvent = (id: number, data: {
+  venueId: number;
+  artist: string;
+  title: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  imageUrl?: string;
+}) =>
+  fetchAPI<{ message: string }>(`/business/events/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+// Business - Seat Zones
+export const createSeatZone = (data: {
+  venueId: number;
+  name: string;
+  rowCount: number;
+  colCount: number;
+  notes?: string;
+}) =>
+  fetchAPI<{ message: string; zoneId: number }>('/business/seat-zones', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getSeatZonesByVenue = (venueId: number) =>
+  fetchAPI<{ seatZones: SeatZone[] }>(`/business/venues/${venueId}/seat-zones`);
+
+// Business - Tickets
+export const getAllTickets = () =>
+  fetchAPI<{ tickets: Ticket[] }>('/business/tickets');
+
+export const createTicketForBusiness = (data: CreateTicketData) =>
+  fetchAPI<{ message: string; ticket: any }>('/business/tickets', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+// Business - Stats
+export const getBusinessStats = () =>
+  fetchAPI<{
+    totalVenues: number;
+    totalEvents: number;
+    totalTickets: number;
+    totalRevenue: number;
+  }>('/business/stats');
+
 // Types
 export interface Event {
   eventId: number;
@@ -276,5 +365,25 @@ export interface UserReviews {
 export interface CreateCaseData {
   orderId: number;
   type: 'Fraud' | 'Delivery' | 'Refund' | 'Other';
+}
+
+export interface Venue {
+  venue_id: number;
+  name: string;
+  city: string;
+  address: string;
+}
+
+export interface BusinessEvent {
+  eventId: number;
+  venueId: number;
+  artist: string;
+  title: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  imageUrl?: string;
+  venue?: Venue;
 }
 

@@ -81,3 +81,38 @@ desktop.ini
 # yarn.lock
 # pnpm-lock.yaml
 
+# Additional sensitive files
+*.pem
+*.key
+*.cert
+*.crt
+secrets/
+.secrets
+
+# Database files (if any local databases)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# IDE specific (additional)
+*.code-workspace
+.vscode/
+.idea/
+*.iml
+
+# OS specific (Windows)
+$RECYCLE.BIN/
+*.lnk
+
+# OS specific (macOS)
+.AppleDouble
+.LSOverride
+
+# OS specific (Linux)
+*~
+.directory

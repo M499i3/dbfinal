@@ -123,34 +123,6 @@ export const getListingDetails = async (req: AuthRequest, res: Response): Promis
   }
 };
 
-// 審核上架（通過或拒絕）
-export const approveListing = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const { action } = req.body; // 'approve' 或 'reject'
-
-  try {
-    if (action !== 'approve' && action !== 'reject') {
-      res.status(400).json({ error: '無效的操作，必須是 approve 或 reject' });
-      return;
-    }
-
-    const approvalStatus = action === 'approve' ? 'Approved' : 'Rejected';
-
-    await pool.query(
-      `UPDATE listing SET approval_status = $1 WHERE listing_id = $2`,
-      [approvalStatus, id]
-    );
-
-    res.json({ 
-      message: action === 'approve' ? '上架已審核通過' : '上架已拒絕',
-      approvalStatus 
-    });
-  } catch (error) {
-    console.error('審核上架錯誤:', error);
-    res.status(500).json({ error: '伺服器錯誤' });
-  }
-};
-
 // 下架違規票券（移到管理票券功能中）
 export const takeDownListing = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
@@ -1076,7 +1048,7 @@ export const approveListing = async (req: AuthRequest, res: Response): Promise<v
 
     // 檢查上架是否存在且為待審核狀態
     const listingCheck = await pool.query(
-      `SELECT listing_id FROM listing WHERE listing_id = $1 AND status = 'Pending'`,
+      `SELECT listing_id, status FROM listing WHERE listing_id = $1 AND approval_status = 'Pending'`,
       [id]
     );
 
@@ -1086,19 +1058,23 @@ export const approveListing = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // 更新上架狀態為 Active
+    const currentStatus = listingCheck.rows[0].status;
+    // 如果 status 是 'Pending'，更新為 'Active'；否則保持原狀態
+    const newStatus = currentStatus === 'Pending' ? 'Active' : currentStatus;
+
+    // 更新上架狀態和審核狀態
     await pool.query(
       `UPDATE listing 
-       SET status = 'Active', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP
-       WHERE listing_id = $2`,
-      [reviewerId, id]
+       SET status = $1, approval_status = 'Approved', reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP
+       WHERE listing_id = $3`,
+      [newStatus, reviewerId, id]
     );
 
-    // 更新所有上架項目狀態
+    // 更新所有待審核的上架項目狀態為 Active
     await pool.query(
       `UPDATE listing_item 
        SET status = 'Active' 
-       WHERE listing_id = $1`,
+       WHERE listing_id = $1 AND status = 'Pending'`,
       [id]
     );
 
@@ -1123,7 +1099,7 @@ export const rejectListing = async (req: AuthRequest, res: Response): Promise<vo
 
     // 檢查上架是否存在且為待審核狀態
     const listingCheck = await pool.query(
-      `SELECT listing_id FROM listing WHERE listing_id = $1 AND status = 'Pending'`,
+      `SELECT listing_id FROM listing WHERE listing_id = $1 AND approval_status = 'Pending'`,
       [id]
     );
 
@@ -1136,7 +1112,7 @@ export const rejectListing = async (req: AuthRequest, res: Response): Promise<vo
     // 更新上架狀態為 Rejected
     await pool.query(
       `UPDATE listing 
-       SET status = 'Rejected', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP, rejection_reason = $3
+       SET status = 'Cancelled', approval_status = 'Rejected', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP, rejection_reason = $3
        WHERE listing_id = $2`,
       [reviewerId, id, reason]
     );

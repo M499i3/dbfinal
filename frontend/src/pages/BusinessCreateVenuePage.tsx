@@ -28,7 +28,7 @@ export default function BusinessCreateVenuePage() {
       // 成功後返回場館列表
       navigate('/business/venues');
     } catch (err: any) {
-      setError(err.response?.data?.error || '建立場館失敗');
+      setError(err.message || '建立場館失敗');
     } finally {
       setLoading(false);
     }
