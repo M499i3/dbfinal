@@ -30,6 +30,7 @@ import {
 import {
   getAllListings,
   getListingDetails,
+  approveListing,
   takeDownListing,
   approveListing,
   rejectListing,
@@ -41,6 +42,7 @@ import {
   getAllOrders,
   getOrderDetails,
   getTransactionStats,
+  createCase,
   getAllCases,
   getCaseDetails,
   updateCaseStatus,
@@ -87,6 +89,9 @@ router.post('/reviews', authenticate, createReview);
 router.get('/users/:userId/reviews', getUserReviews);
 router.get('/sellers/:sellerId', getSellerProfile); // 獲取賣家資料
 
+// ==================== 申訴案件路由 ====================
+router.post('/cases', authenticate, createCase);
+
 // ==================== 業務經營者路由 ====================
 // 場館管理
 router.post('/business/venues', authenticate, requireBusinessOperator, createVenue);
@@ -115,6 +120,7 @@ router.get('/business/stats', authenticate, requireBusinessOperator, getBusiness
 // 票券與刊登管理
 router.get('/business/listings', authenticate, requireBusinessOperator, getAllListings);
 router.get('/business/listings/:id', authenticate, requireBusinessOperator, getListingDetails);
+router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
 router.post('/business/listings/:id/take-down', authenticate, requireBusinessOperator, takeDownListing);
 router.post('/business/listings/:id/approve', authenticate, requireBusinessOperator, approveListing);
 router.post('/business/listings/:id/reject', authenticate, requireBusinessOperator, rejectListing);

@@ -12,6 +12,22 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
   try {
     await client.query('BEGIN');
 
+    // 驗證價格是否為正整數
+    if (!prices || !Array.isArray(prices) || prices.length !== ticketIds.length) {
+      res.status(400).json({ error: '價格數量必須與票券數量一致' });
+      await client.query('ROLLBACK');
+      return;
+    }
+
+    for (let i = 0; i < prices.length; i++) {
+      const price = parseFloat(prices[i]);
+      if (isNaN(price) || price <= 0 || !Number.isInteger(price)) {
+        res.status(400).json({ error: '價格必須為正整數' });
+        await client.query('ROLLBACK');
+        return;
+      }
+    }
+
     // 檢查使用者是否擁有這些票券
     const ticketCheck = await client.query(
       `SELECT ticket_id FROM ticket 
@@ -25,11 +41,14 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 檢查票券是否已經上架（包括待審核和進行中的）
+    // 檢查票券是否已經上架（包括待審核和已審核通過的）
     const activeListingCheck = await client.query(
       `SELECT li.ticket_id FROM listing_item li
        JOIN listing l ON li.listing_id = l.listing_id
-       WHERE li.ticket_id = ANY($1) AND (l.status = 'Active' OR l.status = 'Pending')`,
+       WHERE li.ticket_id = ANY($1) 
+       AND li.status = 'Active' 
+       AND l.status = 'Active'
+       AND l.approval_status IN ('Pending', 'Approved')`,
       [ticketIds]
     );
 
@@ -39,35 +58,12 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Get ticket details with face values for risk assessment
-    const ticketDetails = await client.query(
-      `SELECT ticket_id, face_value FROM ticket WHERE ticket_id = ANY($1)`,
-      [ticketIds]
-    );
-
-    const ticketsForAssessment = ticketDetails.rows.map((ticket, index) => ({
-      ticketId: ticket.ticket_id,
-      price: parseFloat(prices[index]),
-      faceValue: parseFloat(ticket.face_value),
-    }));
-
-    // Perform risk assessment
-    const riskFlags = await assessListingRisk(userId!, ticketsForAssessment);
-    const requiresReview = riskFlags.length > 0; // If any risk flags, needs review
-    const initialStatus = requiresReview ? 'Pending' : 'Active';
-    
-    // Debug logging
-    console.log(`[Listing Creation] User ${userId}, Risk flags: ${riskFlags.length}, Status: ${initialStatus}`);
-    if (riskFlags.length > 0) {
-      console.log(`[Listing Creation] Risk flags:`, riskFlags.map(f => f.type));
-    }
-
-    // 建立上架記錄
+    // 建立上架記錄（默認為待審核狀態）
     const listingResult = await client.query(
-      `INSERT INTO listing (seller_id, expires_at, status)
-       VALUES ($1, $2, $3)
-       RETURNING listing_id, created_at, status`,
-      [userId, expiresAt, initialStatus]
+      `INSERT INTO listing (seller_id, expires_at, status, approval_status)
+       VALUES ($1, $2, 'Active', 'Pending')
+       RETURNING listing_id, created_at`,
+      [userId, expiresAt]
     );
 
     const listingId = listingResult.rows[0].listing_id;
@@ -120,7 +116,7 @@ export const getMyListings = async (req: AuthRequest, res: Response): Promise<vo
 
   try {
     const result = await pool.query(
-      `SELECT l.listing_id, l.created_at, l.expires_at, l.status,
+      `SELECT l.listing_id, l.created_at, l.expires_at, l.status, l.approval_status,
               json_agg(json_build_object(
                 'ticketId', t.ticket_id,
                 'seatLabel', t.seat_label,
@@ -148,6 +144,7 @@ export const getMyListings = async (req: AuthRequest, res: Response): Promise<vo
         createdAt: listing.created_at,
         expiresAt: listing.expires_at,
         status: listing.status,
+        approvalStatus: listing.approval_status,
         items: listing.items,
       })),
     });
@@ -173,14 +170,30 @@ export const cancelListing = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // 檢查是否有票券已經售出
+    const soldItemsCheck = await pool.query(
+      `SELECT COUNT(*) as sold_count
+       FROM listing_item
+       WHERE listing_id = $1 AND status = 'Sold'`,
+      [id]
+    );
+
+    const soldCount = parseInt(soldItemsCheck.rows[0].sold_count);
+
+    if (soldCount > 0) {
+      res.status(400).json({ error: '無法取消上架：此上架中已有票券售出' });
+      return;
+    }
+
     // 更新上架狀態
     await pool.query(
       `UPDATE listing SET status = 'Cancelled' WHERE listing_id = $1`,
       [id]
     );
 
+    // 只更新未售出的上架項目狀態
     await pool.query(
-      `UPDATE listing_item SET status = 'Cancelled' WHERE listing_id = $1`,
+      `UPDATE listing_item SET status = 'Cancelled' WHERE listing_id = $1 AND status = 'Active'`,
       [id]
     );
 

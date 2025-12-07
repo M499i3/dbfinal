@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMyOrders, payOrder, cancelOrder, Order } from '../services/api';
+import { getMyOrders, payOrder, cancelOrder, createReview, createCase, Order } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { ShoppingBag, Calendar, CreditCard, X, Check } from 'lucide-react';
+import { ShoppingBag, Calendar, CreditCard, X, Check, Star, AlertCircle } from 'lucide-react';
 
 export default function MyOrdersPage() {
   const { user } = useAuth();
@@ -10,6 +10,13 @@ export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [reviewingOrderId, setReviewingOrderId] = useState<number | null>(null);
+  const [reviewScore, setReviewScore] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [casingOrderId, setCasingOrderId] = useState<number | null>(null);
+  const [caseType, setCaseType] = useState<'Fraud' | 'Delivery' | 'Refund' | 'Other'>('Other');
+  const [timeRemaining, setTimeRemaining] = useState<Record<number, number>>({});
+  const lastRefreshTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!user) {
@@ -19,11 +26,101 @@ export default function MyOrdersPage() {
     fetchOrders();
   }, [user, navigate]);
 
+  // 計算剩餘時間並更新倒計時
+  useEffect(() => {
+    if (orders.length === 0) {
+      setTimeRemaining({});
+      return;
+    }
+
+    const calculateTimeRemaining = () => {
+      // 使用 UTC 时间戳，避免时区问题
+      const now = Date.now(); // 这已经是 UTC 时间戳（毫秒）
+      const newTimeRemaining: Record<number, number> = {};
+
+      orders.forEach((order) => {
+        if (order.status === 'Pending') {
+          // 确保 createdAt 是有效的日期字符串
+          // PostgreSQL 返回的时间是 UTC 时间（ISO 8601 格式，以 Z 结尾）
+          let createdAtTime: number;
+          try {
+            // 确保 createdAt 是字符串格式
+            const createdAtStr = typeof order.createdAt === 'string' 
+              ? order.createdAt 
+              : order.createdAt?.toString() || '';
+            
+            // 直接解析为 Date 对象，JavaScript 会自动处理 UTC 时间
+            const createdAt = new Date(createdAtStr);
+            if (isNaN(createdAt.getTime())) {
+              // 如果日期無效，跳過
+              return;
+            }
+            
+            // 使用 getTime() 获取 UTC 时间戳（毫秒）
+            createdAtTime = createdAt.getTime();
+          } catch (error) {
+            return;
+          }
+
+          const fiveMinutes = 5 * 60 * 1000; // 5 分鐘（毫秒）
+          const elapsed = now - createdAtTime;
+          
+          // 如果 elapsed 是负数或异常大（超过 1 小时），可能是时区问题
+          // 这种情况下，我们假设订单刚创建，剩余时间为 5 分钟
+          if (elapsed < 0 || elapsed > 60 * 60 * 1000) {
+            // 假设订单刚创建，剩余时间为 5 分钟
+            newTimeRemaining[order.orderId] = fiveMinutes;
+          } else {
+            const remaining = Math.max(0, fiveMinutes - elapsed);
+            newTimeRemaining[order.orderId] = remaining;
+          }
+        }
+      });
+
+      setTimeRemaining(newTimeRemaining);
+    };
+
+    calculateTimeRemaining();
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      calculateTimeRemaining();
+      
+      // 檢查是否有訂單超時，如果有則刷新訂單列表（但避免頻繁刷新）
+      const hasExpired = orders.some((order) => {
+        if (order.status === 'Pending') {
+          const createdAt = new Date(order.createdAt);
+          if (isNaN(createdAt.getTime())) {
+            return false;
+          }
+          const createdAtTime = createdAt.getTime();
+          const fiveMinutes = 5 * 60 * 1000;
+          // 檢查是否剛好超過 5 分鐘（允許 10 秒的緩衝時間）
+          return now - createdAtTime >= fiveMinutes && now - createdAtTime < fiveMinutes + 10000;
+        }
+        return false;
+      });
+      
+      // 只有在有超時訂單且距離上次刷新超過 10 秒時才刷新
+      if (hasExpired && now - lastRefreshTimeRef.current > 10000) {
+        lastRefreshTimeRef.current = now;
+        // 使用 setTimeout 延遲刷新，避免在 useEffect 中直接調用
+        setTimeout(() => {
+          fetchOrders();
+        }, 100);
+      }
+    }, 1000); // 每秒更新一次
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
       const data = await getMyOrders();
       setOrders(data.orders);
+      // 重置倒计时状态
+      setTimeRemaining({});
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -62,6 +159,7 @@ export default function MyOrdersPage() {
     );
   };
 
+
   const handlePay = async (orderId: number) => {
     try {
       setProcessingId(orderId);
@@ -85,6 +183,55 @@ export default function MyOrdersPage() {
       fetchOrders();
     } catch (error: any) {
       alert(error.message || '取消失敗');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleSubmitReview = async (orderId: number, sellerId: number) => {
+    if (!reviewScore || reviewScore < 1 || reviewScore > 5) {
+      alert('請選擇評分（1-5 分）');
+      return;
+    }
+
+    try {
+      setProcessingId(orderId);
+      await createReview({
+        orderId,
+        revieweeId: sellerId,
+        score: reviewScore,
+        comment: reviewComment.trim() || '',
+      });
+      alert('評價成功！');
+      setReviewingOrderId(null);
+      setReviewScore(5);
+      setReviewComment('');
+      fetchOrders();
+    } catch (error: any) {
+      alert(error.message || '評價失敗');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleSubmitCase = async (orderId: number) => {
+    if (!caseType) {
+      alert('請選擇申訴類型');
+      return;
+    }
+
+    try {
+      setProcessingId(orderId);
+      await createCase({
+        orderId,
+        type: caseType,
+      });
+      alert('申訴案件已提交！');
+      setCasingOrderId(null);
+      setCaseType('Other');
+      fetchOrders();
+    } catch (error: any) {
+      alert(error.message || '提交申訴失敗');
     } finally {
       setProcessingId(null);
     }
@@ -220,35 +367,175 @@ export default function MyOrdersPage() {
                   {/* Actions */}
                   {order.status === 'Pending' && (
                     <div className="flex justify-end space-x-4">
-                      <button
-                        onClick={() => handleCancel(order.orderId)}
-                        disabled={processingId === order.orderId}
-                        className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-50"
-                      >
-                        <X size={18} />
-                        <span>取消訂單</span>
-                      </button>
-                      <button
-                        onClick={() => handlePay(order.orderId)}
-                        disabled={processingId === order.orderId}
-                        className="btn-primary flex items-center space-x-2 disabled:opacity-50"
-                      >
-                        {processingId === order.orderId ? (
-                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                        ) : (
-                          <>
-                            <CreditCard size={18} />
-                            <span>立即付款</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                        <button
+                          onClick={() => handleCancel(order.orderId)}
+                          disabled={processingId === order.orderId}
+                          className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-50"
+                        >
+                          <X size={18} />
+                          <span>取消訂單</span>
+                        </button>
+                        <button
+                          onClick={() => handlePay(order.orderId)}
+                          disabled={processingId === order.orderId}
+                          className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+                        >
+                          {processingId === order.orderId ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                          ) : (
+                            <>
+                              <CreditCard size={18} />
+                              <span>立即付款</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                   )}
 
                   {order.status === 'Completed' && (
-                    <div className="flex items-center justify-end text-green-400">
-                      <Check size={18} className="mr-2" />
-                      <span>交易已完成</span>
+                    <div className="space-y-4">
+                      {order.hasReviewed ? (
+                        <div className="flex items-center justify-end text-green-400">
+                          <Check size={18} className="mr-2" />
+                          <span>交易已完成 · 已評價</span>
+                        </div>
+                      ) : reviewingOrderId === order.orderId ? (
+                        <div className="p-4 rounded-xl bg-[#1a1a25] border border-gray-700">
+                          <h4 className="text-white font-medium mb-4">評價賣家</h4>
+                          <div className="mb-4">
+                            <label className="block text-gray-400 text-sm mb-2">評分</label>
+                            <div className="flex items-center space-x-2">
+                              {[1, 2, 3, 4, 5].map((score) => (
+                                <button
+                                  key={score}
+                                  type="button"
+                                  onClick={() => setReviewScore(score)}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    reviewScore >= score
+                                      ? 'text-yellow-400 bg-yellow-400/20'
+                                      : 'text-gray-600 bg-gray-800'
+                                  }`}
+                                >
+                                  <Star
+                                    size={24}
+                                    className={reviewScore >= score ? 'fill-current' : ''}
+                                  />
+                                </button>
+                              ))}
+                              <span className="ml-2 text-gray-400 text-sm">
+                                {reviewScore} 分
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mb-4">
+                            <label className="block text-gray-400 text-sm mb-2">評論（選填）</label>
+                            <textarea
+                              value={reviewComment}
+                              onChange={(e) => setReviewComment(e.target.value)}
+                              placeholder="分享您的購買體驗..."
+                              className="w-full px-4 py-2 bg-[#12121a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
+                              rows={3}
+                              maxLength={200}
+                            />
+                            <p className="text-gray-500 text-xs mt-1">
+                              {reviewComment.length}/200
+                            </p>
+                          </div>
+                          <div className="flex justify-end space-x-3">
+                            <button
+                              onClick={() => {
+                                setReviewingOrderId(null);
+                                setReviewScore(5);
+                                setReviewComment('');
+                              }}
+                              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                            >
+                              取消
+                            </button>
+                            <button
+                              onClick={() => {
+                                const sellerId = order.items[0]?.sellerId;
+                                if (sellerId) {
+                                  handleSubmitReview(order.orderId, sellerId);
+                                } else {
+                                  alert('無法獲取賣家資訊');
+                                }
+                              }}
+                              disabled={processingId === order.orderId || !order.items[0]?.sellerId}
+                              className="btn-primary px-4 py-2 disabled:opacity-50"
+                            >
+                              {processingId === order.orderId ? '提交中...' : '提交評價'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end space-x-4">
+                          <div className="flex items-center text-green-400">
+                            <Check size={18} className="mr-2" />
+                            <span>交易已完成</span>
+                          </div>
+                          <button
+                            onClick={() => setReviewingOrderId(order.orderId)}
+                            className="btn-secondary flex items-center space-x-2"
+                          >
+                            <Star size={18} />
+                            <span>評價賣家</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Case Section */}
+                      {order.hasCase ? (
+                        <div className="flex items-center justify-end text-blue-400">
+                          <AlertCircle size={18} className="mr-2" />
+                          <span>已提交申訴案件</span>
+                        </div>
+                      ) : casingOrderId === order.orderId ? (
+                        <div className="p-4 rounded-xl bg-[#1a1a25] border border-gray-700">
+                          <h4 className="text-white font-medium mb-4">提交申訴案件</h4>
+                          <div className="mb-4">
+                            <label className="block text-gray-400 text-sm mb-2">申訴類型 *</label>
+                            <select
+                              value={caseType}
+                              onChange={(e) => setCaseType(e.target.value as 'Fraud' | 'Delivery' | 'Refund' | 'Other')}
+                              className="w-full px-4 py-2 bg-[#12121a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-primary-500"
+                            >
+                              <option value="Fraud">詐欺</option>
+                              <option value="Delivery">配送問題</option>
+                              <option value="Refund">退款</option>
+                              <option value="Other">其他</option>
+                            </select>
+                          </div>
+                          <div className="flex justify-end space-x-3">
+                            <button
+                              onClick={() => {
+                                setCasingOrderId(null);
+                                setCaseType('Other');
+                              }}
+                              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                            >
+                              取消
+                            </button>
+                            <button
+                              onClick={() => handleSubmitCase(order.orderId)}
+                              disabled={processingId === order.orderId}
+                              className="btn-primary px-4 py-2 disabled:opacity-50"
+                            >
+                              {processingId === order.orderId ? '提交中...' : '提交申訴'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => setCasingOrderId(order.orderId)}
+                            className="btn-secondary flex items-center space-x-2"
+                          >
+                            <AlertCircle size={18} />
+                            <span>提出申訴</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

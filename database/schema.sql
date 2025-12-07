@@ -98,13 +98,14 @@ CREATE TABLE IF NOT EXISTS listing (
     seller_id BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP,
-    status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Active', 'Sold', 'Expired', 'Cancelled', 'Rejected')),
-    risk_flags TEXT,  -- JSON array of risk reasons
-    reviewed_by BIGINT,
-    reviewed_at TIMESTAMP,
-    FOREIGN KEY (seller_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES "user"(user_id) ON DELETE SET NULL ON UPDATE CASCADE
+    status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Sold', 'Expired', 'Cancelled')),
+    approval_status VARCHAR(20) DEFAULT 'Pending' CHECK (approval_status IN ('Pending', 'Approved', 'Rejected')),
+    FOREIGN KEY (seller_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- 索引
+CREATE INDEX IF NOT EXISTS idx_listing_approval_status ON listing(approval_status);
+CREATE INDEX IF NOT EXISTS idx_listing_status_approval ON listing(status, approval_status);
 
 -- 表 8: LISTING_ITEM - 上架項目資料表（票券與上架的關聯）
 CREATE TABLE IF NOT EXISTS listing_item (
@@ -208,7 +209,7 @@ CREATE TABLE IF NOT EXISTS risk_event (
     risk_id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('Login', 'Fraud', 'Transfer', 'Payment')),
-    ref_id BIGINT,
+    ref_id BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     level INT NOT NULL CHECK (level >= 1 AND level <= 5),
     FOREIGN KEY (user_id) REFERENCES "user"(user_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -266,4 +267,9 @@ CREATE INDEX idx_review_order ON review(order_id);
 CREATE INDEX idx_risk_user ON risk_event(user_id);
 CREATE INDEX idx_risk_type ON risk_event(type);
 CREATE INDEX idx_listing_risk_flag_listing ON listing_risk_flag(listing_id);
+
+-- 申訴案件相關索引
+CREATE INDEX idx_case_order ON "case"(order_id);
+CREATE INDEX idx_case_reporter ON "case"(reporter_id);
+CREATE INDEX idx_case_status ON "case"(status);
 

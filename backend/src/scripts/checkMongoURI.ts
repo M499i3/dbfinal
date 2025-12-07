@@ -77,3 +77,7 @@ console.log('   2. 如果密碼包含特殊字元，請進行 URL 編碼');
 console.log('   3. 確認 IP 白名單設定允許你的 IP 連線');
 console.log('   4. 確認資料庫使用者有正確的權限');
 
+
+
+
+

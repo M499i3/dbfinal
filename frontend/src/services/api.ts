@@ -90,22 +90,10 @@ export const createReview = (data: CreateReviewData) =>
 export const getUserReviews = (userId: number) =>
   fetchAPI<UserReviews>(`/users/${userId}/reviews`);
 
-// Venues (Business)
-export const createVenue = (data: CreateVenueData) =>
-  fetchAPI<{ message: string; venue: any }>('/business/venues', {
+// Cases
+export const createCase = (data: CreateCaseData) =>
+  fetchAPI<{ message: string; caseId: number }>('/cases', {
     method: 'POST',
-    body: JSON.stringify(data),
-  });
-
-export const getVenues = () =>
-  fetchAPI<{ venues: Venue[] }>('/business/venues');
-
-export const getVenueById = (id: number) =>
-  fetchAPI<{ venue: Venue }>(`/business/venues/${id}`);
-
-export const updateVenue = (id: number, data: CreateVenueData) =>
-  fetchAPI<{ message: string; venue: any }>(`/business/venues/${id}`, {
-    method: 'PUT',
     body: JSON.stringify(data),
   });
 
@@ -209,6 +197,7 @@ export interface Listing {
   createdAt: string;
   expiresAt: string;
   status: string;
+  approvalStatus?: string;
   items: {
     ticketId: number;
     seatLabel: string;
@@ -225,6 +214,8 @@ export interface Order {
   orderId: number;
   createdAt: string;
   status: string;
+  hasReviewed?: boolean;
+  hasCase?: boolean;
   payment: {
     paymentId: number;
     method: string;
@@ -240,6 +231,7 @@ export interface Order {
     artist: string;
     eventDate: string;
     zoneName: string;
+    sellerId: number;
     sellerName: string;
   }[];
 }
@@ -263,7 +255,7 @@ export interface CreateReviewData {
   orderId: number;
   revieweeId: number;
   score: number;
-  comment: string;
+  comment?: string;
 }
 
 export interface UserReviews {
@@ -281,16 +273,8 @@ export interface UserReviews {
   }[];
 }
 
-export interface Venue {
-  venue_id: number;
-  name: string;
-  city: string;
-  address: string;
-}
-
-export interface CreateVenueData {
-  name: string;
-  city: string;
-  address: string;
+export interface CreateCaseData {
+  orderId: number;
+  type: 'Fraud' | 'Delivery' | 'Refund' | 'Other';
 }
 

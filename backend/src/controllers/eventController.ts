@@ -8,14 +8,16 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
     let query = `
       SELECT e.event_id, e.artist, e.title, e.event_date, e.start_time, e.end_time, e.status, e.image_url,
              v.venue_id, v.name as venue_name, v.city, v.address,
-             COUNT(DISTINCT li.ticket_id) as available_tickets,
-             MIN(li.price) as min_price,
-             MAX(li.price) as max_price
+             COUNT(DISTINCT CASE WHEN li.ticket_id IS NOT NULL AND li.status = 'Active' AND l.status = 'Active' AND l.approval_status = 'Approved' THEN li.ticket_id END) as available_tickets,
+             MIN(CASE WHEN li.ticket_id IS NOT NULL AND li.status = 'Active' AND l.status = 'Active' AND l.approval_status = 'Approved' THEN li.price END) as min_price,
+             MAX(CASE WHEN li.ticket_id IS NOT NULL AND li.status = 'Active' AND l.status = 'Active' AND l.approval_status = 'Approved' THEN li.price END) as max_price
       FROM event e
       JOIN venue v ON e.venue_id = v.venue_id
       LEFT JOIN ticket t ON e.event_id = t.event_id
       LEFT JOIN listing_item li ON t.ticket_id = li.ticket_id AND li.status = 'Active'
-      LEFT JOIN listing l ON li.listing_id = l.listing_id AND l.status = 'Active'
+      LEFT JOIN listing l ON li.listing_id = l.listing_id 
+        AND l.status = 'Active' 
+        AND l.approval_status = 'Approved'
       WHERE 1=1
     `;
 
@@ -44,6 +46,11 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
       query += ` AND e.status = $${paramIndex}`;
       params.push(status);
       paramIndex++;
+      
+      // 如果狀態為 'Scheduled'，額外過濾掉已結束的活動
+      if (status === 'Scheduled') {
+        query += ` AND (e.event_date + e.start_time) > CURRENT_TIMESTAMP`;
+      }
     }
 
     query += `

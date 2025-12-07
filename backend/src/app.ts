@@ -7,6 +7,7 @@ dotenv.config();
 
 import router from './routes/index.js';
 import { connectMongoDB, closeMongoDB } from './config/mongodb.js';
+import { startOrderTimeoutService } from './services/orderTimeoutService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -70,6 +71,9 @@ async function startServer() {
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
       `);
+
+      // 啟動訂單超時檢查服務
+      startOrderTimeoutService();
     });
   } catch (error) {
     console.error('❌ 伺服器啟動失敗:', error);

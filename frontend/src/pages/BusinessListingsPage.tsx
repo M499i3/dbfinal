@@ -16,6 +16,7 @@ interface Listing {
   created_at: string;
   expires_at: string;
   status: string;
+  approval_status: string;
   ticket_count: number;
   total_price: number;
   sold_count?: number;
@@ -29,7 +30,8 @@ export default function BusinessListingsPage() {
   const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('Pending'); // 審核頁面默認只顯示待審核
+  const [statusFilter, setStatusFilter] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState('');
 
   useEffect(() => {
     if (!user || !user.roles.includes('BusinessOperator')) {
@@ -37,14 +39,15 @@ export default function BusinessListingsPage() {
       return;
     }
     fetchListings();
-  }, [user, navigate, statusFilter]);
+  }, [user, navigate, statusFilter, approvalFilter]);
 
   const fetchListings = async () => {
     try {
       setLoading(true);
-      // 審核頁面：如果沒有選擇篩選器，默認只顯示待審核
-      const filter = statusFilter || 'Pending';
-      const url = `/api/business/listings?status=${filter}`;
+      const params = new URLSearchParams();
+      if (statusFilter) params.append('status', statusFilter);
+      if (approvalFilter) params.append('approvalStatus', approvalFilter);
+      const url = `/api/business/listings${params.toString() ? '?' + params.toString() : ''}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -59,8 +62,12 @@ export default function BusinessListingsPage() {
     }
   };
 
-  const handleApprove = async (listingId: number) => {
-    if (!confirm('確定要批准此上架嗎？')) return;
+  const handleApprove = async (listingId: number, action: 'approve' | 'reject') => {
+    const confirmMsg = action === 'approve' 
+      ? '確定要審核通過此上架嗎？通過後其他用戶將可以瀏覽和購買。'
+      : '確定要拒絕此上架嗎？';
+    
+    if (!confirm(confirmMsg)) return;
 
     try {
       const response = await fetch(`/api/business/listings/${listingId}/approve`, {
@@ -69,71 +76,19 @@ export default function BusinessListingsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ action }),
       });
 
       if (response.ok) {
-        alert('上架已批准');
+        alert(action === 'approve' ? '上架已審核通過' : '上架已拒絕');
         fetchListings();
       } else {
         const error = await response.json();
-        alert(error.error || '批准失敗');
+        alert(error.error || '操作失敗');
       }
     } catch (error) {
       console.error('Error approving listing:', error);
-      alert('批准失敗');
-    }
-  };
-
-  const handleReject = async (listingId: number) => {
-    const reason = prompt('請輸入拒絕原因：');
-    if (!reason) return;
-
-    try {
-      const response = await fetch(`/api/business/listings/${listingId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason }),
-      });
-
-      if (response.ok) {
-        alert('上架已拒絕');
-        fetchListings();
-      } else {
-        const error = await response.json();
-        alert(error.error || '拒絕失敗');
-      }
-    } catch (error) {
-      console.error('Error rejecting listing:', error);
-      alert('拒絕失敗');
-    }
-  };
-
-  const handleTakeDown = async (listingId: number) => {
-    if (!confirm('確定要下架此上架嗎？')) return;
-
-    try {
-      const response = await fetch(`/api/business/listings/${listingId}/take-down`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason: '管理員下架' }),
-      });
-
-      if (response.ok) {
-        alert('上架已下架');
-        fetchListings();
-      } else {
-        const error = await response.json();
-        alert(error.error || '下架失敗');
-      }
-    } catch (error) {
-      console.error('Error taking down listing:', error);
-      alert('下架失敗');
+      alert('操作失敗');
     }
   };
 
@@ -195,6 +150,24 @@ export default function BusinessListingsPage() {
     );
   };
 
+  const getApprovalBadge = (approvalStatus: string) => {
+    const styles: Record<string, string> = {
+      Pending: 'bg-yellow-500/20 text-yellow-400',
+      Approved: 'bg-green-500/20 text-green-400',
+      Rejected: 'bg-red-500/20 text-red-400',
+    };
+    const labels: Record<string, string> = {
+      Pending: '待審核',
+      Approved: '已通過',
+      Rejected: '已拒絕',
+    };
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[approvalStatus] || ''}`}>
+        {labels[approvalStatus] || approvalStatus}
+      </span>
+    );
+  };
+
   if (!user || !user.roles.includes('BusinessOperator')) {
     return null;
   }
@@ -247,6 +220,16 @@ export default function BusinessListingsPage() {
               <option value="Sold">已售出</option>
               <option value="Expired">已過期</option>
             </select>
+            <select
+              value={approvalFilter}
+              onChange={(e) => setApprovalFilter(e.target.value)}
+              className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
+            >
+              <option value="">全部審核狀態</option>
+              <option value="Pending">待審核</option>
+              <option value="Approved">已通過</option>
+              <option value="Rejected">已拒絕</option>
+            </select>
           </div>
         </div>
 
@@ -273,6 +256,7 @@ export default function BusinessListingsPage() {
                         上架 #{listing.listing_id}
                       </h3>
                       {getStatusBadge(listing.status)}
+                      {getApprovalBadge(listing.approval_status)}
                     </div>
                     <div className="space-y-2 text-sm text-gray-400">
                       <p>
@@ -337,32 +321,22 @@ export default function BusinessListingsPage() {
                       <Eye size={16} />
                       <span>查看詳情</span>
                     </button>
-                    
-                    {/* 只有待審核狀態才顯示批准/拒絕按鈕 */}
-                    {listing.status === 'Pending' && (
-                      <div className="flex space-x-2">
+                    {listing.approval_status === 'Pending' && (
+                      <>
                         <button
-                          onClick={() => handleApprove(listing.listing_id)}
-                          className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm py-2 px-3 flex items-center justify-center space-x-1 hover:bg-green-500/30 transition-colors"
+                          onClick={() => handleApprove(listing.listing_id, 'approve')}
+                          className="bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-green-500/30 transition-colors"
                         >
-                          <CheckCircle size={16} />
-                          <span>批准上架</span>
+                          <span>✓ 通過</span>
                         </button>
                         <button
-                          onClick={() => handleReject(listing.listing_id)}
-                          className="flex-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-3 flex items-center justify-center space-x-1 hover:bg-red-500/30 transition-colors"
+                          onClick={() => handleApprove(listing.listing_id, 'reject')}
+                          className="bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-red-500/30 transition-colors"
                         >
-                          <XCircle size={16} />
-                          <span>拒絕（下架）</span>
+                          <X size={16} />
+                          <span>拒絕</span>
                         </button>
-                      </div>
-                    )}
-                    
-                    {/* 其他狀態不顯示操作按鈕（審核頁面主要處理待審核） */}
-                    {listing.status !== 'Pending' && (
-                      <div className="text-xs text-gray-500 text-center">
-                        此上架已{listing.status === 'Active' ? '通過審核' : listing.status === 'Rejected' ? '被拒絕' : '處理完成'}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>

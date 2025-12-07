@@ -3,52 +3,64 @@ import pool from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 // 使用統一的 reviewee_id（根據助教評論修正）
+// 買家完成付款後可以對訂單進行評價（評價賣家）
 export const createReview = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user?.userId;
   const { orderId, revieweeId, score, comment } = req.body;
 
   try {
+    // 驗證評分範圍
+    if (!score || score < 1 || score > 5) {
+      res.status(400).json({ error: '評分必須在 1 到 5 之間' });
+      return;
+    }
+
     // 檢查訂單是否存在且已完成
     const orderCheck = await pool.query(
-      `SELECT o.order_id, o.buyer_id, l.seller_id
+      `SELECT o.order_id, o.buyer_id, o.status
        FROM "order" o
-       JOIN order_item oi ON o.order_id = oi.order_id
-       JOIN listing l ON oi.listing_id = l.listing_id
-       WHERE o.order_id = $1 AND o.status = 'Completed'
-       LIMIT 1`,
+       WHERE o.order_id = $1`,
       [orderId]
     );
 
     if (orderCheck.rows.length === 0) {
-      res.status(400).json({ error: '訂單不存在或尚未完成' });
+      res.status(400).json({ error: '訂單不存在' });
       return;
     }
 
     const order = orderCheck.rows[0];
 
-    // 檢查評價者是否為訂單的買家或賣家
-    if (order.buyer_id !== userId && order.seller_id !== userId) {
-      res.status(403).json({ error: '您無權評價此訂單' });
+    // 檢查訂單是否已完成
+    if (order.status !== 'Completed') {
+      res.status(400).json({ error: '訂單尚未完成，無法評價' });
       return;
     }
 
-    // 檢查被評價者是否為訂單的另一方
-    if (revieweeId !== order.buyer_id && revieweeId !== order.seller_id) {
-      res.status(400).json({ error: '被評價者必須是訂單的另一方' });
+    // 檢查評價者是否為訂單的買家
+    if (order.buyer_id !== userId) {
+      res.status(403).json({ error: '只有買家可以評價此訂單' });
       return;
     }
 
-    // 不能評價自己
-    if (userId === revieweeId) {
-      res.status(400).json({ error: '不能評價自己' });
+    // 檢查被評價者是否為訂單中任意一個訂單項的賣家
+    const sellerCheck = await pool.query(
+      `SELECT DISTINCT l.seller_id
+       FROM order_item oi
+       JOIN listing l ON oi.listing_id = l.listing_id
+       WHERE oi.order_id = $1 AND l.seller_id = $2`,
+      [orderId, revieweeId]
+    );
+
+    if (sellerCheck.rows.length === 0) {
+      res.status(400).json({ error: '只能評價此訂單的賣家' });
       return;
     }
 
-    // 檢查是否已經評價過
+    // 檢查是否已經評價過此訂單
     const existingReview = await pool.query(
       `SELECT review_id FROM review 
-       WHERE order_id = $1 AND reviewer_id = $2 AND reviewee_id = $3`,
-      [orderId, userId, revieweeId]
+       WHERE order_id = $1 AND reviewer_id = $2`,
+      [orderId, userId]
     );
 
     if (existingReview.rows.length > 0) {
@@ -61,7 +73,7 @@ export const createReview = async (req: AuthRequest, res: Response): Promise<voi
       `INSERT INTO review (order_id, reviewer_id, reviewee_id, score, comment)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING review_id, created_at`,
-      [orderId, userId, revieweeId, score, comment]
+      [orderId, userId, revieweeId, score, comment || null]
     );
 
     res.status(201).json({

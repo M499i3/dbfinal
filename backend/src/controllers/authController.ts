@@ -177,9 +177,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     );
 
     // 記錄登入風險事件
+    // 注意：Login 類型的 ref_id 使用 user_id 作為參考
     await pool.query(
-      'INSERT INTO risk_event (user_id, type, level) VALUES ($1, $2, $3)',
-      [user.user_id, 'Login', 1]
+      'INSERT INTO risk_event (user_id, type, level, ref_id) VALUES ($1, $2, $3, $4)',
+      [user.user_id, 'Login', 1, user.user_id]
     );
 
     res.json({

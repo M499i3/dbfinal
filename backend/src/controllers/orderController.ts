@@ -18,7 +18,9 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
          FROM listing_item li
          JOIN listing l ON li.listing_id = l.listing_id
          WHERE li.listing_id = $1 AND li.ticket_id = $2 
-         AND li.status = 'Active' AND l.status = 'Active'
+         AND li.status = 'Active' 
+         AND l.status = 'Active' 
+         AND l.approval_status = 'Approved'
          FOR UPDATE`,
         [item.listingId, item.ticketId]
       );
@@ -46,7 +48,9 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
     // 建立訂單
     const orderResult = await client.query(
-      `INSERT INTO "order" (buyer_id, status) VALUES ($1, 'Pending') RETURNING order_id, created_at`,
+      `INSERT INTO "order" (buyer_id, status) 
+       VALUES ($1, 'Pending') 
+       RETURNING order_id, created_at`,
       [userId]
     );
 
@@ -84,11 +88,26 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
     await client.query('COMMIT');
 
+    // 处理时间格式，确保返回 UTC 时间的 ISO 8601 字符串
+    let createdAt = orderResult.rows[0].created_at;
+    if (createdAt instanceof Date) {
+      createdAt = createdAt.toISOString();
+    } else if (typeof createdAt === 'string') {
+      // 如果已经是字符串，确保是 ISO 8601 格式
+      // 如果字符串没有时区信息，假设是 UTC
+      if (!createdAt.endsWith('Z') && !createdAt.includes('+') && !createdAt.includes('-', 10)) {
+        // 没有时区信息，添加 Z 表示 UTC
+        createdAt = createdAt + 'Z';
+      }
+    } else {
+      createdAt = new Date(createdAt).toISOString();
+    }
+    
     res.status(201).json({
-      message: '訂單建立成功，請在 30 分鐘內完成付款',
+      message: '訂單建立成功，請在 5 分鐘內完成付款',
       orderId,
       totalAmount,
-      createdAt: orderResult.rows[0].created_at,
+      createdAt,
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -104,8 +123,14 @@ export const getMyOrders = async (req: AuthRequest, res: Response): Promise<void
 
   try {
     const result = await pool.query(
-      `SELECT o.order_id, o.created_at, o.status,
-              p.payment_id, p.method, p.amount, p.paid_at, p.status as payment_status,
+      `SELECT o.order_id, 
+              o.created_at, 
+              o.status,
+              (SELECT payment_id FROM payment WHERE order_id = o.order_id LIMIT 1) as payment_id,
+              (SELECT method FROM payment WHERE order_id = o.order_id LIMIT 1) as method,
+              (SELECT amount FROM payment WHERE order_id = o.order_id LIMIT 1) as amount,
+              (SELECT paid_at FROM payment WHERE order_id = o.order_id LIMIT 1) as paid_at,
+              (SELECT status FROM payment WHERE order_id = o.order_id LIMIT 1) as payment_status,
               json_agg(json_build_object(
                 'ticketId', t.ticket_id,
                 'seatLabel', t.seat_label,
@@ -114,10 +139,12 @@ export const getMyOrders = async (req: AuthRequest, res: Response): Promise<void
                 'artist', e.artist,
                 'eventDate', e.event_date,
                 'zoneName', sz.name,
+                'sellerId', u.user_id,
                 'sellerName', u.name
-              )) as items
+              )) as items,
+              (SELECT COUNT(*) > 0 FROM review WHERE order_id = o.order_id AND reviewer_id = $1) as has_reviewed,
+              (SELECT COUNT(*) > 0 FROM "case" WHERE order_id = o.order_id AND reporter_id = $1) as has_case
        FROM "order" o
-       LEFT JOIN payment p ON o.order_id = p.order_id
        JOIN order_item oi ON o.order_id = oi.order_id
        JOIN ticket t ON oi.ticket_id = t.ticket_id
        JOIN event e ON t.event_id = e.event_id
@@ -125,25 +152,44 @@ export const getMyOrders = async (req: AuthRequest, res: Response): Promise<void
        JOIN listing l ON oi.listing_id = l.listing_id
        JOIN "user" u ON l.seller_id = u.user_id
        WHERE o.buyer_id = $1
-       GROUP BY o.order_id, p.payment_id
+       GROUP BY o.order_id, o.created_at, o.status
        ORDER BY o.created_at DESC`,
       [userId]
     );
 
     res.json({
-      orders: result.rows.map((order) => ({
-        orderId: order.order_id,
-        createdAt: order.created_at,
-        status: order.status,
-        payment: {
-          paymentId: order.payment_id,
-          method: order.method,
-          amount: order.amount ? parseFloat(order.amount) : null,
-          paidAt: order.paid_at,
-          status: order.payment_status,
-        },
-        items: order.items,
-      })),
+      orders: result.rows.map((order) => {
+        // 处理时间格式，确保返回 UTC 时间的 ISO 8601 字符串
+        let createdAt = order.created_at;
+        if (createdAt instanceof Date) {
+          createdAt = createdAt.toISOString();
+        } else if (typeof createdAt === 'string') {
+          // 如果已经是字符串，确保是 ISO 8601 格式
+          // 如果字符串没有时区信息，假设是 UTC
+          if (!createdAt.endsWith('Z') && !createdAt.includes('+') && !createdAt.includes('-', 10)) {
+            // 没有时区信息，添加 Z 表示 UTC
+            createdAt = createdAt + 'Z';
+          }
+        } else {
+          createdAt = new Date(createdAt).toISOString();
+        }
+        
+        return {
+          orderId: order.order_id,
+          createdAt,
+          status: order.status,
+          hasReviewed: order.has_reviewed || false,
+          hasCase: order.has_case || false,
+          payment: {
+            paymentId: order.payment_id,
+            method: order.method,
+            amount: order.amount ? parseFloat(order.amount) : null,
+            paidAt: order.paid_at,
+            status: order.payment_status,
+          },
+          items: order.items,
+        };
+      }),
     });
   } catch (error) {
     console.error('獲取訂單錯誤:', error);
