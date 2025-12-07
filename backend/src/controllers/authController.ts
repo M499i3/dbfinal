@@ -11,29 +11,29 @@ const registerWithRole = async (
   password: string,
   role: 'User' | 'BusinessOperator'
 ): Promise<{ user: any; token: string }> => {
-  // 檢查 email 是否已存在
-  const existingUser = await pool.query(
-    'SELECT user_id FROM "user" WHERE email = $1 OR phone = $2',
-    [email, phone]
-  );
+    // 檢查 email 是否已存在
+    const existingUser = await pool.query(
+      'SELECT user_id FROM "user" WHERE email = $1 OR phone = $2',
+      [email, phone]
+    );
 
-  if (existingUser.rows.length > 0) {
+    if (existingUser.rows.length > 0) {
     throw new Error('此電子郵件或電話號碼已被註冊');
-  }
+    }
 
-  // 加密密碼
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(password, salt);
+    // 加密密碼
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
 
-  // 建立使用者
-  const result = await pool.query(
-    `INSERT INTO "user" (name, email, phone, password_hash, kyc_level)
-     VALUES ($1, $2, $3, $4, 0)
-     RETURNING user_id, name, email, phone, kyc_level, created_at`,
-    [name, email, phone, passwordHash]
-  );
+    // 建立使用者
+    const result = await pool.query(
+      `INSERT INTO "user" (name, email, phone, password_hash, kyc_level)
+       VALUES ($1, $2, $3, $4, 0)
+       RETURNING user_id, name, email, phone, kyc_level, created_at`,
+      [name, email, phone, passwordHash]
+    );
 
-  const newUser = result.rows[0];
+    const newUser = result.rows[0];
 
   // 為新使用者添加角色
   await pool.query('INSERT INTO user_role (user_id, role) VALUES ($1, $2)', [
@@ -41,23 +41,23 @@ const registerWithRole = async (
     role,
   ]);
 
-  // 生成 JWT
-  const token = jwt.sign(
+    // 生成 JWT
+    const token = jwt.sign(
     { userId: newUser.user_id, email: newUser.email, roles: [role] },
-    process.env.JWT_SECRET || 'default_secret',
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
+      process.env.JWT_SECRET || 'default_secret',
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
 
   return {
-    user: {
-      userId: newUser.user_id,
-      name: newUser.name,
-      email: newUser.email,
-      phone: newUser.phone,
-      kycLevel: newUser.kyc_level,
-      createdAt: newUser.created_at,
+      user: {
+        userId: newUser.user_id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        kycLevel: newUser.kyc_level,
+        createdAt: newUser.created_at,
       roles: [role],
-    },
+      },
     token,
   };
 };

@@ -81,7 +81,10 @@ export default function BusinessVenuesPage() {
                 <h3 className="text-xl font-semibold text-white mb-2">{venue.name}</h3>
                 <p className="text-gray-400 mb-1">{venue.city}</p>
                 <p className="text-gray-500 text-sm mb-4">{venue.address}</p>
-                <button className="btn-secondary text-sm py-2 w-full flex items-center justify-center space-x-1">
+                <button 
+                  onClick={() => navigate(`/business/venues/${venue.venue_id}/edit`)}
+                  className="btn-secondary text-sm py-2 w-full flex items-center justify-center space-x-1"
+                >
                   <Edit size={16} />
                   <span>編輯</span>
                 </button>

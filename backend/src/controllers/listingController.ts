@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { assessListingRisk, saveRiskFlags } from '../utils/riskAssessment.js';
 
 export const createListing = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user?.userId;
@@ -52,7 +53,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
     );
 
     if (activeListingCheck.rows.length > 0) {
-      res.status(400).json({ error: '部分票券已經在上架中' });
+      res.status(400).json({ error: '部分票券已經在上架中或等待審核' });
       await client.query('ROLLBACK');
       return;
     }
@@ -67,21 +68,39 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
 
     const listingId = listingResult.rows[0].listing_id;
 
+    // Save risk flags if any (within the same transaction)
+    if (riskFlags.length > 0) {
+      for (const flag of riskFlags) {
+        await client.query(
+          `INSERT INTO listing_risk_flag (listing_id, flag_type, flag_reason)
+           VALUES ($1, $2, $3)`,
+          [listingId, flag.type, flag.reason]
+        );
+      }
+    }
+
     // 建立上架項目
     for (let i = 0; i < ticketIds.length; i++) {
       await client.query(
         `INSERT INTO listing_item (listing_id, ticket_id, price, status)
-         VALUES ($1, $2, $3, 'Active')`,
-        [listingId, ticketIds[i], prices[i]]
+         VALUES ($1, $2, $3, $4)`,
+        [listingId, ticketIds[i], prices[i], initialStatus]
       );
     }
 
     await client.query('COMMIT');
 
+    const message = requiresReview 
+      ? '上架已送出，等待審核中' 
+      : '上架成功';
+
     res.status(201).json({
-      message: '上架成功',
+      message,
       listingId,
       createdAt: listingResult.rows[0].created_at,
+      status: listingResult.rows[0].status,
+      requiresReview,
+      riskFlags: requiresReview ? riskFlags : undefined,
     });
   } catch (error) {
     await client.query('ROLLBACK');

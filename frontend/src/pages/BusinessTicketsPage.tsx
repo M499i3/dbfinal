@@ -98,6 +98,59 @@ export default function BusinessTicketsPage() {
     );
   };
 
+  useEffect(() => {
+    filterTickets();
+  }, [searchTerm, statusFilter, tickets]);
+
+  const fetchTickets = async () => {
+    try {
+      const response = await fetch('/api/business/tickets', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTickets(data.tickets || []);
+        setFilteredTickets(data.tickets || []);
+      }
+    } catch (error) {
+      console.error('Error fetching tickets:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterTickets = () => {
+    let filtered = [...tickets];
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (ticket) =>
+          ticket.event_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.seat_label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.owner_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.serial_no.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((ticket) => {
+        if (statusFilter === 'Listed') {
+          return ticket.listing_status === 'Active';
+        } else if (statusFilter === 'Sold') {
+          return ticket.order_status === 'Completed' || ticket.order_status === 'Paid';
+        } else {
+          return ticket.ticket_status === statusFilter;
+        }
+      });
+    }
+
+    setFilteredTickets(filtered);
+  };
+
+
   if (!user || !user.roles.includes('BusinessOperator')) {
     return null;
   }

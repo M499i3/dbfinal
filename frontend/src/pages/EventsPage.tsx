@@ -7,7 +7,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Scheduled'); // Default to upcoming events
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -39,7 +39,15 @@ export default function EventsPage() {
     const eventDateObj = new Date(eventDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    eventDateObj.setHours(0, 0, 0, 0);
     return eventDateObj < today;
+  };
+
+  // Get the actual current status of an event (considers date)
+  const getActualStatus = (event: Event) => {
+    if (event.status === 'Cancelled') return 'Cancelled';
+    if (isEventPast(event.eventDate)) return 'Finished';
+    return 'Scheduled';
   };
 
   const filteredEvents = events.filter((event) => {
@@ -47,24 +55,28 @@ export default function EventsPage() {
       event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.venue.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || event.status === statusFilter;
+    
+    // Filter by actual status (not just database status)
+    const actualStatus = getActualStatus(event);
+    const matchesStatus = !statusFilter || actualStatus === statusFilter;
+    
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      Scheduled: 'bg-green-500/20 text-green-400',
-      Finished: 'bg-gray-500/20 text-gray-400',
-      Cancelled: 'bg-red-500/20 text-red-400',
+  const getStatusBadge = (event: Event) => {
+    const actualStatus = getActualStatus(event);
+    
+    const badges = {
+      Scheduled: { label: '即將舉行', color: 'bg-green-500/20 text-green-400' },
+      Finished: { label: '已結束', color: 'bg-gray-500/20 text-gray-400' },
+      Cancelled: { label: '已取消', color: 'bg-red-500/20 text-red-400' },
     };
-    const labels: Record<string, string> = {
-      Scheduled: '即將舉行',
-      Finished: '已結束',
-      Cancelled: '已取消',
-    };
+    
+    const badge = badges[actualStatus as keyof typeof badges];
+    
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-        {labels[status]}
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.color}`}>
+        {badge.label}
       </span>
     );
   };
@@ -95,7 +107,7 @@ export default function EventsPage() {
             </div>
           )}
           <div className="absolute top-4 left-4">
-            {getStatusBadge(event.status)}
+            {getStatusBadge(event)}
           </div>
           {event.availableTickets > 0 && !isPast && (
             <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium backdrop-blur-sm">

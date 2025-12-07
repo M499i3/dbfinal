@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, Search, Eye, CheckCircle, PlayCircle, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface Case {
   caseId: number;
@@ -17,9 +18,11 @@ interface Case {
 
 export default function BusinessCasesPage() {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     fetchCases();
@@ -46,10 +49,62 @@ export default function BusinessCasesPage() {
     return new Date(dateStr).toLocaleString('zh-TW');
   };
 
+  const handleStartProcessing = async (caseId: number) => {
+    if (!confirm('確定要開始處理此案件嗎？')) return;
+
+    try {
+      const response = await fetch(`/api/business/cases/${caseId}/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        alert('案件已標記為處理中');
+        fetchCases();
+      } else {
+        const error = await response.json();
+        alert(error.error || '操作失敗');
+      }
+    } catch (error) {
+      console.error('Error starting case:', error);
+      alert('操作失敗');
+    }
+  };
+
+  const handleCloseCase = async (caseId: number) => {
+    const resolution = prompt('請輸入結案說明：');
+    if (!resolution) return;
+
+    try {
+      const response = await fetch(`/api/business/cases/${caseId}/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ resolution }),
+      });
+
+      if (response.ok) {
+        alert('案件已結案');
+        fetchCases();
+      } else {
+        const error = await response.json();
+        alert(error.error || '結案失敗');
+      }
+    } catch (error) {
+      console.error('Error closing case:', error);
+      alert('結案失敗');
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; color: string }> = {
-      Open: { label: '處理中', color: 'bg-yellow-500/20 text-yellow-400' },
-      Resolved: { label: '已解決', color: 'bg-green-500/20 text-green-400' },
+      Open: { label: '待處理', color: 'bg-yellow-500/20 text-yellow-400' },
+      InProgress: { label: '處理中', color: 'bg-blue-500/20 text-blue-400' },
       Closed: { label: '已結案', color: 'bg-gray-500/20 text-gray-400' },
     };
     const badge = badges[status] || { label: status, color: 'bg-gray-500/20 text-gray-400' };
@@ -62,11 +117,14 @@ export default function BusinessCasesPage() {
 
   const filteredCases = cases.filter((c) => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
       c.caseId.toString().includes(searchTerm) ||
       c.complainantName.toLowerCase().includes(searchLower) ||
-      c.respondentName.toLowerCase().includes(searchLower)
-    );
+      c.respondentName.toLowerCase().includes(searchLower);
+    
+    const matchesStatus = statusFilter === '' || c.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
   });
 
   return (
@@ -77,8 +135,34 @@ export default function BusinessCasesPage() {
           <p className="text-gray-400">處理爭議交易與申訴</p>
         </div>
 
-        <div className="mb-6">
-          <div className="relative">
+        {/* Filters and Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <p className="text-gray-400 text-sm mb-1">待處理</p>
+            <p className="text-2xl font-bold text-yellow-400">
+              {cases.filter((c) => c.status === 'Open').length}
+            </p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <p className="text-gray-400 text-sm mb-1">處理中</p>
+            <p className="text-2xl font-bold text-blue-400">
+              {cases.filter((c) => c.status === 'InProgress').length}
+            </p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <p className="text-gray-400 text-sm mb-1">已結案</p>
+            <p className="text-2xl font-bold text-gray-400">
+              {cases.filter((c) => c.status === 'Closed').length}
+            </p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <p className="text-gray-400 text-sm mb-1">總案件數</p>
+            <p className="text-2xl font-bold text-white">{cases.length}</p>
+          </div>
+        </div>
+
+        <div className="mb-6 flex items-center space-x-4">
+          <div className="relative flex-1">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
             <input
               type="text"
@@ -87,6 +171,19 @@ export default function BusinessCasesPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field pr-12"
             />
+          </div>
+          <div className="relative">
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
+            >
+              <option value="">全部狀態</option>
+              <option value="Open">待處理</option>
+              <option value="InProgress">處理中</option>
+              <option value="Closed">已結案</option>
+            </select>
           </div>
         </div>
 
@@ -129,7 +226,38 @@ export default function BusinessCasesPage() {
                     <span className="text-gray-500">類型: </span>
                     {c.type}
                   </p>
-                  <p className="text-white">{c.description}</p>
+                  <p className="text-white mb-4">{c.description}</p>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => navigate(`/business/cases/${c.caseId}`)}
+                      className="flex-1 bg-white/5 text-white border border-white/10 rounded-lg text-sm py-2 px-4 flex items-center justify-center space-x-2 hover:bg-white/10 transition-colors"
+                    >
+                      <Eye size={16} />
+                      <span>查看詳情</span>
+                    </button>
+                    
+                    {c.status === 'Open' && (
+                      <button
+                        onClick={() => handleStartProcessing(c.caseId)}
+                        className="flex-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm py-2 px-4 flex items-center justify-center space-x-2 hover:bg-blue-500/30 transition-colors"
+                      >
+                        <PlayCircle size={16} />
+                        <span>開始處理</span>
+                      </button>
+                    )}
+                    
+                    {(c.status === 'Open' || c.status === 'InProgress') && (
+                      <button
+                        onClick={() => handleCloseCase(c.caseId)}
+                        className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm py-2 px-4 flex items-center justify-center space-x-2 hover:bg-green-500/30 transition-colors"
+                      >
+                        <CheckCircle size={16} />
+                        <span>結案</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

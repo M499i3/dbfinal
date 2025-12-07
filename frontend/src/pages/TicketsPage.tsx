@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { getAvailableTickets, createOrder, Ticket } from '../services/api';
+import { getAvailableTickets, Ticket } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, Filter, Ticket as TicketIcon, Star, Calendar, MapPin, ShoppingCart, X } from 'lucide-react';
+import { Search, Filter, Ticket as TicketIcon, Star, Calendar, MapPin } from 'lucide-react';
 
 export default function TicketsPage() {
   const { user, token } = useAuth();
@@ -12,9 +12,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
-  const [cart, setCart] = useState<Ticket[]>([]);
-  const [showCart, setShowCart] = useState(false);
-  const [purchasing, setPurchasing] = useState(false);
+  // Direct purchase - no cart needed
 
   useEffect(() => {
     fetchTickets();
@@ -54,43 +52,7 @@ export default function TicketsPage() {
     );
   });
 
-  const addToCart = (ticket: Ticket) => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    if (!cart.find((t) => t.ticketId === ticket.ticketId)) {
-      setCart([...cart, ticket]);
-      setShowCart(true);
-    }
-  };
-
-  const removeFromCart = (ticketId: number) => {
-    setCart(cart.filter((t) => t.ticketId !== ticketId));
-  };
-
-  const totalAmount = cart.reduce((sum, t) => sum + t.listing.price, 0);
-
-  const handlePurchase = async () => {
-    if (!token || cart.length === 0) return;
-
-    try {
-      setPurchasing(true);
-      const items = cart.map((t) => ({
-        listingId: t.listing.listingId,
-        ticketId: t.ticketId,
-      }));
-      const result = await createOrder(items);
-      alert(`訂單建立成功！訂單編號: ${result.orderId}\n總金額: NT$ ${result.totalAmount.toLocaleString()}`);
-      setCart([]);
-      setShowCart(false);
-      navigate('/my-orders');
-    } catch (error: any) {
-      alert(error.message || '購買失敗');
-    } finally {
-      setPurchasing(false);
-    }
-  };
+  // Direct purchase - cart functions removed
 
   return (
     <div className="min-h-screen py-12">
@@ -128,18 +90,7 @@ export default function TicketsPage() {
                 <option value="price-desc">價格：高到低</option>
               </select>
             </div>
-            <button
-              onClick={() => setShowCart(true)}
-              className="relative btn-secondary flex items-center justify-center space-x-2"
-            >
-              <ShoppingCart size={20} />
-              <span>購物車</span>
-              {cart.length > 0 && (
-                <span className="absolute -top-2 -right-2 w-6 h-6 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {cart.length}
-                </span>
-              )}
-            </button>
+            {/* Direct purchase - no cart needed */}
           </div>
         </div>
 
@@ -168,16 +119,10 @@ export default function TicketsPage() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTickets.map((ticket, index) => {
-              const inCart = cart.find((t) => t.ticketId === ticket.ticketId);
-              return (
+            {filteredTickets.map((ticket, index) => (
                 <div
                   key={ticket.ticketId}
-                  className={`card-hover rounded-2xl border p-6 animate-fade-in ${
-                    inCart
-                      ? 'bg-primary-500/10 border-primary-500'
-                      : 'bg-[#12121a] border-gray-800'
-                  }`}
+                  className="card-hover rounded-2xl border bg-[#12121a] border-gray-800 p-6 animate-fade-in"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   {/* Event Info */}
@@ -228,113 +173,20 @@ export default function TicketsPage() {
                         </div>
                       </div>
                     </Link>
-                    {inCart ? (
-                      <button
-                        onClick={() => removeFromCart(ticket.ticketId)}
-                        className="text-primary-400 text-sm hover:underline"
-                      >
-                        移除
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => addToCart(ticket)}
-                        className="btn-primary text-sm px-4 py-2"
-                      >
-                        加入購物車
-                      </button>
-                    )}
+                    <Link
+                      to={`/checkout?listingId=${ticket.listing.listingId}&ticketId=${ticket.ticketId}`}
+                      className="btn-primary text-sm px-4 py-2 inline-block text-center"
+                    >
+                      立即購買
+                    </Link>
                   </div>
                 </div>
-              );
-            })}
+            ))}
           </div>
         )}
       </div>
 
-      {/* Cart Sidebar */}
-      {showCart && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowCart(false)}
-          ></div>
-          <div className="relative w-full max-w-md bg-[#12121a] border-l border-gray-800 h-full overflow-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">購物車</h2>
-                <button
-                  onClick={() => setShowCart(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {cart.length === 0 ? (
-                <div className="text-center py-12">
-                  <ShoppingCart className="mx-auto h-12 w-12 text-gray-600 mb-4" />
-                  <p className="text-gray-400">購物車是空的</p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-4 mb-6">
-                    {cart.map((ticket) => (
-                      <div
-                        key={ticket.ticketId}
-                        className="p-4 rounded-xl bg-[#1a1a25] border border-gray-800"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h4 className="text-white font-medium">{ticket.event.title}</h4>
-                            <p className="text-gray-400 text-sm">{ticket.event.artist}</p>
-                          </div>
-                          <button
-                            onClick={() => removeFromCart(ticket.ticketId)}
-                            className="text-gray-500 hover:text-primary-400"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="text-sm text-gray-500">
-                            {ticket.zone.name} · {ticket.seatLabel}
-                          </div>
-                          <div className="text-primary-400 font-semibold">
-                            NT$ {ticket.listing.price.toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="border-t border-gray-800 pt-4">
-                    <div className="flex justify-between items-center mb-6">
-                      <span className="text-gray-400">總計</span>
-                      <span className="text-2xl font-bold text-white">
-                        NT$ {totalAmount.toLocaleString()}
-                      </span>
-                    </div>
-                    <button
-                      onClick={handlePurchase}
-                      disabled={purchasing}
-                      className="w-full btn-primary flex items-center justify-center space-x-2"
-                    >
-                      {purchasing ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <ShoppingCart size={20} />
-                          <span>確認購買</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Direct purchase - cart removed */}
     </div>
   );
 }

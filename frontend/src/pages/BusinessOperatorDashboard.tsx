@@ -21,7 +21,8 @@ export default function BusinessOperatorDashboard() {
     totalEvents: 0,
     totalVenues: 0,
     totalTickets: 0,
-    totalRevenue: 0,
+    transactionVolume: 0,
+    activeListings: 0,
     pendingListings: 0,
     openCases: 0,
     totalUsers: 0,
@@ -41,7 +42,7 @@ export default function BusinessOperatorDashboard() {
         fetch('/api/business/stats', {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch('/api/business/listings?status=Active', {
+        fetch('/api/business/listings?status=Pending', {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch('/api/business/cases?status=Open', {
@@ -201,9 +202,21 @@ export default function BusinessOperatorDashboard() {
               </div>
             </div>
             <div className="text-3xl font-bold text-white mb-1">
-              NT$ {stats.totalRevenue.toLocaleString()}
+              NT$ {stats.transactionVolume.toLocaleString()}
             </div>
-            <div className="text-gray-400 text-sm">總營收</div>
+            <div className="text-gray-400 text-sm">交易總額</div>
+            <div className="text-gray-500 text-xs mt-1">平台總交易量</div>
+          </div>
+
+          <div className="card-hover p-6 rounded-2xl bg-[#12121a] border border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <ShoppingBag className="text-green-400" size={24} />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-white mb-1">{stats.activeListings}</div>
+            <div className="text-gray-400 text-sm">活躍上架</div>
+            <div className="text-gray-500 text-xs mt-1">目前可購買</div>
           </div>
 
           <div className="card-hover p-6 rounded-2xl bg-[#12121a] border border-gray-800">

@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth.js';
 
 export const getAvailableTickets = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { eventId, zoneId, minPrice, maxPrice } = req.query;
+    const { eventId, zoneId, minPrice, maxPrice, listingId, ticketId } = req.query;
 
     let query = `
       SELECT t.ticket_id, t.seat_label, t.face_value, t.original_vendor, t.serial_no,
@@ -30,48 +30,70 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
     const params: any[] = [];
     let paramIndex = 1;
 
-    if (eventId) {
-      query += ` AND e.event_id = $${paramIndex}`;
-      params.push(parseInt(eventId as string));
-      paramIndex++;
-    }
-
-    if (zoneId) {
-      query += ` AND sz.zone_id = $${paramIndex}`;
-      params.push(zoneId);
-      paramIndex++;
-    }
-
-    if (minPrice) {
-      query += ` AND li.price >= $${paramIndex}`;
-      params.push(minPrice);
-      paramIndex++;
-    }
-
-    if (maxPrice) {
-      query += ` AND li.price <= $${paramIndex}`;
-      params.push(maxPrice);
-      paramIndex++;
-    }
-
-    const sortBy = req.query.sortBy as string || 'newest';
-    
-    let orderBy = '';
-    if (sortBy === 'price-asc') {
-      orderBy = 'ORDER BY li.price ASC';
-    } else if (sortBy === 'price-desc') {
-      orderBy = 'ORDER BY li.price DESC';
+    // If listingId and ticketId are provided, fetch specific ticket (for checkout page)
+    // This ensures we get the exact price for the specific listing_item
+    if (listingId && ticketId) {
+      query += ` AND li.listing_id = $${paramIndex} AND t.ticket_id = $${paramIndex + 1}`;
+      params.push(parseInt(listingId as string));
+      params.push(parseInt(ticketId as string));
+      paramIndex += 2;
     } else {
-      // 預設：按新發布排序
-      orderBy = 'ORDER BY l.created_at DESC';
+      // Otherwise, apply normal filters for browsing
+      if (eventId) {
+        query += ` AND e.event_id = $${paramIndex}`;
+        params.push(parseInt(eventId as string));
+        paramIndex++;
+      }
+
+      if (zoneId) {
+        query += ` AND sz.zone_id = $${paramIndex}`;
+        params.push(zoneId);
+        paramIndex++;
+      }
+
+      if (minPrice) {
+        query += ` AND li.price >= $${paramIndex}`;
+        params.push(minPrice);
+        paramIndex++;
+      }
+
+      if (maxPrice) {
+        query += ` AND li.price <= $${paramIndex}`;
+        params.push(maxPrice);
+        paramIndex++;
+      }
     }
-    
+
+    // Only apply sorting if not fetching a specific ticket
+    let orderBy = '';
+    if (!listingId || !ticketId) {
+      const sortBy = req.query.sortBy as string || 'newest';
+      
+      if (sortBy === 'price-asc') {
+        orderBy = 'ORDER BY li.price ASC';
+      } else if (sortBy === 'price-desc') {
+        orderBy = 'ORDER BY li.price DESC';
+      } else {
+        // 預設：按新發布排序
+        orderBy = 'ORDER BY l.created_at DESC';
+      }
+    }
+
     query += `
       GROUP BY t.ticket_id, e.event_id, sz.zone_id, li.listing_id, li.price, l.seller_id, u.name, l.created_at
       ${orderBy}
     `;
 
     const result = await pool.query(query, params);
+
+    // Debug logging for specific ticket fetch
+    if (listingId && ticketId) {
+      console.log(`[Ticket Fetch] listingId=${listingId}, ticketId=${ticketId}`);
+      console.log(`[Ticket Fetch] Found ${result.rows.length} rows`);
+      if (result.rows.length > 0) {
+        console.log(`[Ticket Fetch] Price: ${result.rows[0].price}, ListingId: ${result.rows[0].listing_id}`);
+      }
+    }
 
     res.json({
       tickets: result.rows.map((ticket) => ({
@@ -93,7 +115,7 @@ export const getAvailableTickets = async (req: Request, res: Response): Promise<
         },
         listing: {
           listingId: ticket.listing_id,
-          price: parseFloat(ticket.price),
+          price: parseFloat(ticket.price), // This should be li.price from the query
           createdAt: ticket.listing_created_at,
           seller: {
             sellerId: ticket.seller_id,

@@ -188,12 +188,12 @@ export default function HomePage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-4xl font-display font-bold text-white/20 mb-2">
-                            {event.artist.charAt(0)}
-                          </div>
-                          <div className="text-sm text-gray-500">{event.venue.city}</div>
-                        </div>
+                    <div className="text-center">
+                      <div className="text-4xl font-display font-bold text-white/20 mb-2">
+                        {event.artist.charAt(0)}
+                      </div>
+                      <div className="text-sm text-gray-500">{event.venue.city}</div>
+                    </div>
                       </div>
                     )}
                     {event.availableTickets > 0 && (

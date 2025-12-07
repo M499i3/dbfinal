@@ -93,7 +93,10 @@ export default function BusinessEventsPage() {
                   {event.venue_name && <p>場館: {event.venue_name}</p>}
                 </div>
                 <div className="flex space-x-2">
-                  <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center space-x-1">
+                  <button 
+                    onClick={() => navigate(`/business/events/${event.event_id}/edit`)}
+                    className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center space-x-1"
+                  >
                     <Edit size={16} />
                     <span>編輯</span>
                   </button>

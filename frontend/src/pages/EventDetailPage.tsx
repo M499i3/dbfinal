@@ -225,10 +225,10 @@ export default function EventDetailPage() {
                       </div>
                     </div>
                     <Link
-                      to={`/tickets?eventId=${event.eventId}&ticketId=${ticket.ticketId}`}
+                      to={`/checkout?listingId=${ticket.listing.listingId}&ticketId=${ticket.ticketId}`}
                       className="btn-primary text-sm px-4 py-2"
                     >
-                      購買
+                      立即購買
                     </Link>
                   </div>
                 </div>

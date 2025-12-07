@@ -47,7 +47,7 @@ export default function RegisterPage() {
           formData.password
         );
       } else {
-        await register(formData.name, formData.email, formData.phone, formData.password);
+      await register(formData.name, formData.email, formData.phone, formData.password);
       }
       navigate('/');
     } catch (err: any) {

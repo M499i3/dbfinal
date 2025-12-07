@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Eye, X, Search, Filter } from 'lucide-react';
+import { FileText, Eye, X, Search, Filter, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+
+interface RiskFlag {
+  type: string;
+  reason: string;
+}
 
 interface Listing {
   listing_id: number;
@@ -14,6 +19,10 @@ interface Listing {
   approval_status: string;
   ticket_count: number;
   total_price: number;
+  sold_count?: number;
+  active_count?: number;
+  pending_count?: number;
+  risk_flags?: RiskFlag[];
 }
 
 export default function BusinessListingsPage() {
@@ -83,18 +92,56 @@ export default function BusinessListingsPage() {
     }
   };
 
+  const getRiskFlagColor = (type: string) => {
+    switch (type) {
+      case 'HighPrice':
+        return 'text-orange-400 bg-orange-400/10';
+      case 'LowPrice':
+        return 'text-yellow-400 bg-yellow-400/10';
+      case 'NewSeller':
+        return 'text-blue-400 bg-blue-400/10';
+      case 'HighQuantity':
+        return 'text-purple-400 bg-purple-400/10';
+      case 'BlacklistedSeller':
+        return 'text-red-400 bg-red-400/10';
+      default:
+        return 'text-gray-400 bg-gray-400/10';
+    }
+  };
+
+  const getRiskFlagLabel = (type: string) => {
+    switch (type) {
+      case 'HighPrice':
+        return '高價風險';
+      case 'LowPrice':
+        return '低價風險';
+      case 'NewSeller':
+        return '新賣家';
+      case 'HighQuantity':
+        return '大量上架';
+      case 'BlacklistedSeller':
+        return '黑名單賣家';
+      default:
+        return type;
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
+      Pending: 'bg-yellow-500/20 text-yellow-400',
       Active: 'bg-green-500/20 text-green-400',
       Sold: 'bg-blue-500/20 text-blue-400',
       Expired: 'bg-gray-500/20 text-gray-400',
       Cancelled: 'bg-red-500/20 text-red-400',
+      Rejected: 'bg-red-500/20 text-red-400',
     };
     const labels: Record<string, string> = {
+      Pending: '待審核',
       Active: '進行中',
       Sold: '已售出',
       Expired: '已過期',
       Cancelled: '已取消',
+      Rejected: '已拒絕',
     };
     return (
       <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status] || ''}`}>
@@ -133,6 +180,23 @@ export default function BusinessListingsPage() {
           <p className="text-gray-400">審核與管理使用者上架的票券</p>
         </div>
 
+        {/* Pending Count Alert - 只在顯示待審核時顯示 */}
+        {!loading && statusFilter === 'Pending' && listings.length > 0 && (
+          <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-400" />
+              <div>
+                <p className="text-yellow-400 font-medium">
+                  有 {listings.length} 筆上架等待審核
+                </p>
+                <p className="text-yellow-400/70 text-sm">
+                  請檢查風險標記並決定批准或拒絕上架。待審核的票券不會出現在市場上，必須通過審核後才能上架。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-6 flex items-center space-x-4">
           <div className="relative flex-1">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
@@ -149,11 +213,12 @@ export default function BusinessListingsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="input-field pr-12 pl-4 appearance-none cursor-pointer min-w-[160px]"
             >
-              <option value="">全部狀態</option>
+              <option value="Pending">待審核（默認）</option>
               <option value="Active">進行中</option>
+              <option value="Rejected">已拒絕</option>
+              <option value="Cancelled">已取消</option>
               <option value="Sold">已售出</option>
               <option value="Expired">已過期</option>
-              <option value="Cancelled">已取消</option>
             </select>
             <select
               value={approvalFilter}
@@ -201,7 +266,17 @@ export default function BusinessListingsPage() {
                       <p>
                         <span className="text-gray-500">票券數量：</span>
                         {listing.ticket_count} 張
+                        {listing.status === 'Pending' && (
+                          <span className="ml-2 text-yellow-400 text-xs">
+                            (待審核中，不可購買)
+                          </span>
+                        )}
                       </p>
+                      {listing.status === 'Pending' && (listing.sold_count || 0) > 0 && (
+                        <p className="text-red-400 text-xs">
+                          ⚠️ 警告：此待審核上架中有 {listing.sold_count} 張票券標記為已售出（資料異常）
+                        </p>
+                      )}
                       <p>
                         <span className="text-gray-500">總價：</span>
                         NT$ {parseFloat(listing.total_price || '0').toLocaleString()}
@@ -216,12 +291,32 @@ export default function BusinessListingsPage() {
                           {new Date(listing.expires_at).toLocaleString('zh-TW')}
                         </p>
                       )}
+                      
+                      {/* Risk Flags */}
+                      {listing.risk_flags && listing.risk_flags.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-white/10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                            <span className="text-yellow-400 font-medium text-sm">風險標記：</span>
+                          </div>
+                          <div className="space-y-2">
+                            {listing.risk_flags.map((flag, index) => (
+                              <div key={index} className="flex items-start gap-2">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${getRiskFlagColor(flag.type)}`}>
+                                  {getRiskFlagLabel(flag.type)}
+                                </span>
+                                <span className="text-xs text-gray-400">{flag.reason}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex flex-col space-y-2">
                     <button
                       onClick={() => navigate(`/business/listings/${listing.listing_id}`)}
-                      className="btn-secondary text-sm py-2 px-4 flex items-center space-x-1"
+                      className="btn-secondary text-sm py-2 px-4 flex items-center justify-center space-x-1"
                     >
                       <Eye size={16} />
                       <span>查看詳情</span>
