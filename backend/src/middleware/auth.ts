@@ -60,3 +60,26 @@ export const requireUser = (req: AuthRequest, res: Response, next: NextFunction)
   next();
 };
 
+/**
+ * 可選認證中間件：如果有 token 則驗證並設置 user，如果沒有則繼續執行
+ */
+export const optionalAuthenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as {
+        userId: number;
+        email: string;
+        roles: string[];
+      };
+      req.user = decoded;
+    } catch {
+      // Token 無效，但不阻止請求繼續
+      req.user = undefined;
+    }
+  }
+  next();
+};
+

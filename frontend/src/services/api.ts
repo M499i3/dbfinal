@@ -186,6 +186,38 @@ export const getBusinessStats = () =>
     totalRevenue: number;
   }>('/business/stats');
 
+// Search History
+export const saveSearchHistory = (searchTerm: string, pageType: string) => {
+  // 使用 fetch 而不是 fetchAPI，因為這個端點允許未登入用戶
+  const token = localStorage.getItem('token');
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+
+  return fetch(`${API_BASE}/search-history`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ searchTerm, pageType }),
+  }).catch((error) => {
+    // 靜默處理錯誤，不影響用戶搜索體驗
+    console.error('Failed to save search history:', error);
+  });
+};
+
+export const getSearchHistory = (params?: { limit?: number; pageType?: string }) => {
+  const query = params ? '?' + new URLSearchParams({
+    ...(params.limit && { limit: params.limit.toString() }),
+    ...(params.pageType && { pageType: params.pageType }),
+  }).toString() : '';
+  return fetchAPI<{ searchHistory: Array<{
+    searchId: string;
+    searchTerm: string;
+    pageType: string;
+    createdAt: string;
+  }> }>(`/search-history${query}`);
+};
+
 // Types
 export interface Event {
   eventId: number;

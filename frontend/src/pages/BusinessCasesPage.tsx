@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertTriangle, Search, Eye, CheckCircle, PlayCircle, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 interface Case {
   caseId: number;
@@ -27,6 +28,9 @@ export default function BusinessCasesPage() {
   useEffect(() => {
     fetchCases();
   }, []);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'business-cases');
 
   const fetchCases = async () => {
     try {

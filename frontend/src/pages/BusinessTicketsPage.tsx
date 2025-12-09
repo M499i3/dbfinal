@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, Plus, X, Eye, Search, Filter } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 interface Listing {
   listing_id: number;
@@ -16,11 +17,26 @@ interface Listing {
   total_price: number;
 }
 
+interface Ticket {
+  ticket_id: number;
+  event_title: string;
+  artist: string;
+  seat_label: string;
+  owner_name: string;
+  serial_no: string;
+  listing_status: string;
+  order_status: string;
+  ticket_status: string;
+}
+
 export default function BusinessTicketsPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
@@ -28,8 +44,8 @@ export default function BusinessTicketsPage() {
       navigate('/business/dashboard', { replace: true });
       return;
     }
-    fetchListings();
-  }, [user, navigate, statusFilter]);
+    fetchTickets();
+  }, [user, navigate]);
 
   const fetchListings = async () => {
     try {
@@ -102,6 +118,9 @@ export default function BusinessTicketsPage() {
     filterTickets();
   }, [searchTerm, statusFilter, tickets]);
 
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'business-tickets');
+
   const fetchTickets = async () => {
     try {
       const response = await fetch('/api/business/tickets', {
@@ -168,7 +187,9 @@ export default function BusinessTicketsPage() {
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={20} />
             <input
               type="text"
-              placeholder="搜尋上架..."
+              placeholder="搜尋票券..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field pr-12"
             />
           </div>
@@ -192,68 +213,56 @@ export default function BusinessTicketsPage() {
           <div className="text-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
           </div>
-        ) : listings.length === 0 ? (
+        ) : filteredTickets.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <Ticket className="mx-auto mb-4 text-gray-600" size={48} />
-            <p>尚無已審核通過的上架</p>
+            <p>{searchTerm ? '找不到符合條件的票券' : '尚無票券資料'}</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {listings.map((listing) => (
+            {filteredTickets.map((ticket) => (
               <div
-                key={listing.listing_id}
+                key={ticket.ticket_id}
                 className="card-hover p-6 rounded-2xl bg-[#12121a] border border-gray-800"
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
                       <h3 className="text-xl font-semibold text-white">
-                        上架 #{listing.listing_id}
+                        {ticket.event_title} - {ticket.artist}
                       </h3>
-                      {getStatusBadge(listing.status)}
+                      {getStatusBadge(ticket.ticket_status)}
                     </div>
                     <div className="space-y-2 text-sm text-gray-400">
                       <p>
-                        <span className="text-gray-500">賣家：</span>
-                        {listing.seller_name} ({listing.seller_email})
+                        <span className="text-gray-500">座位：</span>
+                        {ticket.seat_label}
                       </p>
                       <p>
-                        <span className="text-gray-500">票券數量：</span>
-                        {listing.ticket_count} 張
+                        <span className="text-gray-500">擁有者：</span>
+                        {ticket.owner_name}
                       </p>
                       <p>
-                        <span className="text-gray-500">總價：</span>
-                        NT$ {parseFloat(listing.total_price || '0').toLocaleString()}
+                        <span className="text-gray-500">序號：</span>
+                        {ticket.serial_no}
                       </p>
                       <p>
-                        <span className="text-gray-500">建立時間：</span>
-                        {new Date(listing.created_at).toLocaleString('zh-TW')}
+                        <span className="text-gray-500">上架狀態：</span>
+                        {ticket.listing_status}
                       </p>
-                      {listing.expires_at && (
-                        <p>
-                          <span className="text-gray-500">到期時間：</span>
-                          {new Date(listing.expires_at).toLocaleString('zh-TW')}
-                        </p>
-                      )}
+                      <p>
+                        <span className="text-gray-500">訂單狀態：</span>
+                        {ticket.order_status}
+                      </p>
                     </div>
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => navigate(`/business/listings/${listing.listing_id}`)}
                       className="btn-secondary text-sm py-2 px-4 flex items-center space-x-1"
                     >
                       <Eye size={16} />
                       <span>查看詳情</span>
                     </button>
-                    {listing.status === 'Active' && (
-                      <button
-                        onClick={() => handleTakeDown(listing.listing_id)}
-                        className="bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-sm py-2 px-4 flex items-center space-x-1 hover:bg-red-500/30 transition-colors"
-                      >
-                        <X size={16} />
-                        <span>下架</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

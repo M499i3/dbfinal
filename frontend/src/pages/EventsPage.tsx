@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getEvents, Event } from '../services/api';
 import { Calendar, MapPin, Search, Filter } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -13,6 +14,9 @@ export default function EventsPage() {
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'events');
 
   const fetchEvents = async () => {
     try {

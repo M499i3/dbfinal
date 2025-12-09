@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Shield, Search, Calendar } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 interface Log {
   logId: number;
@@ -20,6 +21,9 @@ export default function BusinessLogsPage() {
   useEffect(() => {
     fetchLogs();
   }, []);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'business-logs');
 
   const fetchLogs = async () => {
     try {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ShoppingBag, Search, Calendar } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 interface Order {
   orderId: number;
@@ -21,6 +22,9 @@ export default function BusinessOrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'business-orders');
 
   const fetchOrders = async () => {
     try {

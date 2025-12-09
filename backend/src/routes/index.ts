@@ -52,7 +52,8 @@ import {
   getCaseNotes,
   getSystemLogs,
 } from '../controllers/businessManagementController.js';
-import { authenticate, requireBusinessOperator } from '../middleware/auth.js';
+import { saveSearchHistory, getSearchHistory } from '../controllers/searchHistoryController.js';
+import { authenticate, requireBusinessOperator, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -147,6 +148,12 @@ router.put('/business/cases/:id/status', authenticate, requireBusinessOperator, 
 
 // 系統紀錄查詢
 router.get('/business/logs', authenticate, requireBusinessOperator, getSystemLogs);
+
+// ==================== 搜索記錄路由 ====================
+// 保存搜索記錄（允許未登入用戶，但如果有 token 會記錄 userId）
+router.post('/search-history', optionalAuthenticate, saveSearchHistory);
+// 獲取搜索歷史（需要登入）
+router.get('/search-history', authenticate, getSearchHistory);
 
 // ==================== 健康檢查 ====================
 router.get('/health', (_, res) => {

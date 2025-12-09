@@ -116,3 +116,10 @@ $RECYCLE.BIN/
 # OS specific (Linux)
 *~
 .directory
+
+# Report files (final reports)
+finalreport*.md
+finalreport.md
+finalreport2.md
+finalreport3.md
+*.report.md

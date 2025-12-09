@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { getAvailableTickets, Ticket } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, Filter, Ticket as TicketIcon, Star, Calendar, MapPin } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 export default function TicketsPage() {
   const { user, token } = useAuth();
@@ -17,6 +18,9 @@ export default function TicketsPage() {
   useEffect(() => {
     fetchTickets();
   }, [searchParams, sortBy]);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'tickets');
 
   const fetchTickets = async () => {
     try {

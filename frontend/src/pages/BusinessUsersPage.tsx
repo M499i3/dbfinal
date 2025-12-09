@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Shield, AlertTriangle, Search, Filter, Ban, CheckCircle } from 'lucide-react';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 interface User {
   userId: number;
@@ -24,6 +25,9 @@ export default function BusinessUsersPage() {
   useEffect(() => {
     fetchUsers();
   }, [blacklistFilter]);
+
+  // 記錄搜索歷史
+  useSearchHistory(searchTerm, 'business-users');
 
   const fetchUsers = async () => {
     try {
