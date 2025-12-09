@@ -39,3 +39,4 @@ export const useSearchHistory = (
   }, [searchTerm, pageType, debounceMs]);
 };
 
+

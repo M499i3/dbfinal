@@ -114,24 +114,40 @@ CREATE DATABASE encore;
 \i database/seed.sql
 ```
 
-3. **設定後端**
+3. **設定後端環境變數**
+
+在 `backend/` 目錄下建立 `.env` 文件：
+
 ```bash
 cd backend
 
+# 複製範例檔案
+cp env.example .env
+```
+
+編輯 `.env` 文件，填入以下環境變數：
+複製貼上即可
+
+```env
+# Neon PostgreSQL 連接字串
+NEON_DATABASE_URL="postgresql://neondb_owner:npg_CS8q6JysjQlk@ep-morning-shadow-a1s59v7j-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+
+# MongoDB Atlas 連接字串
+MONGODB_URI="mongodb+srv://594handsomeboy_db_user:ICUnPEX7NiJUOcVX@dbfinal.tcjttmn.mongodb.net/?appName=dbfinal"
+
+```
+
+4. **安裝後端依賴並啟動**
+```bash
 # 安裝依賴
 npm install
-
-# 設定環境變數（複製 .env.example 並修改）
-# 設定以下變數：
-# - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-# - JWT_SECRET
-# - PORT
 
 # 啟動開發伺服器
 npm run dev
 ```
 
-4. **設定前端**
+5. **設定前端**
 ```bash
 cd frontend
 
@@ -142,11 +158,12 @@ npm install
 npm run dev
 ```
 
-5. **開啟瀏覽器**
+6. **開啟瀏覽器**
 ```
 前端: http://localhost:5173
 後端 API: http://localhost:3000/api
 ```
+
 
 ## 📱 API 端點
 
